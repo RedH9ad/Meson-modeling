@@ -13,13 +13,22 @@ class Metric_Deformation {
 
   explicit Metric_Deformation(std::vector<double> pars) {
   parametrs = std::move(pars);
-  std::cout <<"Использован конструктор с параметрами" << '\n';
+  if (!parametrs.empty()) {
+    std::cout <<"Использован конструктор с параметрами" << '\n';
+    }
   }
 
   T operator()(T z) const {
     if (parametrs.empty()) {
       return T(0.0);
     }
+    //Для одного параметра также в рамках тест кейсов
+    if (parametrs.size() == 1) {
+      auto k = parametrs[0];
+      using std::log;
+      return T(log(1 + k * z));
+    }
+
     //Для второго тест кейса первый параметр k(aka u_g) второй лямбда_g
     if (parametrs.size() == 2) {
       auto k = parametrs[0];
