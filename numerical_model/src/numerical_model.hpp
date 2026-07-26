@@ -71,19 +71,19 @@ T Mesons_Model<T>::Dilaton(T z) const {
 template <class T>
 void Mesons_Model<T>::inintialise_net() {
   net.clear();
-  double current_z = 0;
-  double epsilon = 1e-7;
-  current_z = epsilon;
+  double epsilon = 1e-10;
   for (size_t i = 0; i < total_net_nodes; i++) {
-    T w = count_w(current_z);
-    net.emplace_back(current_z, i, w);
-    current_z += net_step;
+    double current_z = epsilon + i * net_step;
+    T z_val = T(current_z);
+    T w = count_w(z_val);
+    net.emplace_back(z_val, i, w);
   }
 }
 
 //Рассчет w(z) = Ф(z) - ln(a(z))
 template <class T>
 T Mesons_Model<T>::count_w(T z) const {
+  using std::log;
   return Dilaton(z) - log(metric_scale_factor(z));
 }
 
@@ -171,7 +171,7 @@ Eigen::MatrixXd Mesons_Model<T>::build_matrix_l() {
 
   for (int64_t i = 1; i < total_net_nodes - 1; i++) {
     Ham(i, i) = 2 / squared_step + net[i].potential;
-    if (i - 1 > 0) {
+    if (i > 0) {
       Ham(i, i - 1) = -1 / squared_step;
     }
     if (i < total_net_nodes - 1) {
@@ -188,7 +188,7 @@ Eigen::MatrixXd Mesons_Model<T>::build_matrix() {
 
   for (int64_t i = 0; i < total_net_nodes - 2; i++) {
     Ham(i, i) = 2 / squared_step + net[i + 1].potential;
-    if (i - 1 > 0) {
+    if (i > 0) {
       Ham(i, i - 1) = -1 / squared_step;
     }
     if (i < total_net_nodes - 3) {
