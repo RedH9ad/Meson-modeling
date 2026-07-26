@@ -41,6 +41,9 @@ class Mesons_Model {
   void make_net_a();
 
   Eigen::MatrixXd build_matrix();
+  //C индексом l просто для удобства всяких проверок
+  Eigen::MatrixXd build_matrix_l();
+
   Eigen::VectorXd get_meson_mass_a();
   Eigen::VectorXd get_meson_mass_num();
 };
@@ -159,7 +162,7 @@ void Mesons_Model<T>::make_net_a() {
 
 //Функция собирающая матрицу оператора
 template <class T>
-Eigen::MatrixXd Mesons_Model<T>::build_matrix() {
+Eigen::MatrixXd Mesons_Model<T>::build_matrix_l() {
   Eigen::MatrixXd Ham = Eigen::MatrixXd::Zero(total_net_nodes, total_net_nodes);
   double squared_step = net_step * net_step;
 
@@ -171,7 +174,24 @@ Eigen::MatrixXd Mesons_Model<T>::build_matrix() {
     if (i - 1 > 0) {
       Ham(i, i - 1) = -1 / squared_step;
     }
-    if (i + 1 < total_net_nodes - 1) {
+    if (i < total_net_nodes - 1) {
+      Ham(i, i + 1) = -1 / squared_step;
+    }
+  }
+  return Ham;
+}
+
+template <class T>
+Eigen::MatrixXd Mesons_Model<T>::build_matrix() {
+  Eigen::MatrixXd Ham = Eigen::MatrixXd::Zero(total_net_nodes - 2, total_net_nodes - 2);
+  double squared_step = net_step * net_step;
+
+  for (int64_t i = 0; i < total_net_nodes - 2; i++) {
+    Ham(i, i) = 2 / squared_step + net[i + 1].potential;
+    if (i - 1 > 0) {
+      Ham(i, i - 1) = -1 / squared_step;
+    }
+    if (i < total_net_nodes - 3) {
       Ham(i, i + 1) = -1 / squared_step;
     }
   }
