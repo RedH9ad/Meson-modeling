@@ -19,14 +19,15 @@ class Metric_Deformation {
   }
 
   T operator()(T z) const {
+    //Используется параметризация из данной статьи
     if (parametrs.empty()) {
-      return T(0.0);
+      return (-1.16 / 8) * z * z;
     }
     //Для одного параметра также в рамках тест кейсов
     if (parametrs.size() == 1) {
       auto k = parametrs[0];
       using std::log;
-      return T(log(1 + k * z));
+      return static_cast<T>((log(1 + k * z)));
     }
 
     //Для второго тест кейса первый параметр k(aka u_g) второй лямбда_g
@@ -38,26 +39,26 @@ class Metric_Deformation {
       return -((pow(h, 4) * pow(k, 4) * pow(z, 4)) / pow((1 + pow(k, 2) * pow(z, 2)), 3));
     }
 
-    return T(0.0);
+    return static_cast<T>((0.0));
   }
 };
 
-template <class T>
-class Metric_Scale_Factor {
- private:
-  std::vector<double> parametrs;
- public:
-  Metric_Scale_Factor() = default;
+// template <class T>
+// class Metric_Scale_Factor {
+//  private:
+//   std::vector<double> parametrs;
+//  public:
+//   Metric_Scale_Factor() = default;
 
-  explicit Metric_Scale_Factor(std::vector<double> pars) {
-  parametrs = std::move(pars);
-  }
+//   explicit Metric_Scale_Factor(std::vector<double> pars) {
+//   parametrs = std::move(pars);
+//   }
 
-  T operator()(T z) const {
-    if (parametrs.empty()) {
-    return z < T(1e-10) ? T(std::numeric_limits<double>::infinity()) : 1 / z;
-  }
-  //TODO разные кейсы что по вайбу, пока заглушка
-  return T(0.0);
-  }
-};
+//   T operator()(T z) const {
+//     if (parametrs.empty()) {
+//     return z < static_cast<T>((1e-10)) ? static_cast<T>((std::numeric_limits<double>::infinity())) : 1 / z;
+//   }
+//   //TODO разные кейсы что по вайбу, пока заглушка
+//   return static_cast<T>((0.0));
+//   }
+// };

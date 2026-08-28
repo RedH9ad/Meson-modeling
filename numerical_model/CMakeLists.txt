@@ -42,8 +42,17 @@ add_executable(HoloMesons
     main.cpp
 )
 
+add_executable(kfit
+    fitting_k.cpp
+)
+
 # Указываем, где лежат твои заголовочные файлы (.hpp)
 target_include_directories(HoloMesons PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Подключаем скачанные библиотеки к твоему исполняемому файлу
 target_link_libraries(HoloMesons PRIVATE Eigen3::Eigen autodiff::autodiff)
+
+target_include_directories(kfit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Подключаем скачанные библиотеки к твоему исполняемому файлу
+target_link_libraries(kfit PRIVATE Eigen3::Eigen autodiff::autodiff)
