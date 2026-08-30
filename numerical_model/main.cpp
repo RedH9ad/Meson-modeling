@@ -16,6 +16,11 @@ int main() {
     std::cout << std::sqrt(res(i)) << "\n";
   }
 
+  model.initialize_kiral_sector();
+  for (size_t i = 0; i < 5; i++) {
+    std::cout << model.net[i].kiral_sector.value() << '\n';
+  }
+
   std::cout << "----------------------------" << "\n";
   std::cout << "Далее расчитаные численно" << "\n";
   std::cout << "----------------------------" << "\n";
@@ -27,6 +32,12 @@ int main() {
   for (size_t i = 0; i < 8; i++) {
     std::cout << std::sqrt(res_num(i)) << "\n";
   }
+
+  model_num.initialize_kiral_sector();
+  for (size_t i = 0; i < 5; i++) {
+    std::cout << model_num.net[i].kiral_sector.value() << '\n';
+  }
+
 
   // std::ofstream csv_file("meson_masses_case2.csv");
   //   if (!csv_file.is_open()) {

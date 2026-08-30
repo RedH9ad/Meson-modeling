@@ -16,11 +16,19 @@ constexpr double epsilon = 1e-10;
 
 template<class T>
 class Mesons_Model {
- private:
+ public:
   double net_step = 0.0;
   double z_max = 0.0;
   double k_sw_impact = 0.0;
   double L = 1.0;
+
+  //constants
+  double alpha;
+  double beta;
+  double c;
+  double k_1;
+  double k_2;
+  double gfive_squared = 4 * M_PI * M_PI;
 
   size_t total_net_nodes = 0;
   std::vector<NetNode<T>> net = {};
@@ -41,11 +49,20 @@ class Mesons_Model {
   void inintialise_net();
   T warp_factor_conv(T) const;
 
+  void initialize_kiral_sector();
+  
+
   void make_net_rho();
   void make_net_rho_num();
 
   void make_net_atwo();
   void make_net_atwo_num();
+
+  void make_net_aone();
+  void make_net_aone_num();
+
+  void make_net_fzero();
+  void make_net_fzero_num();
 
   Eigen::MatrixXd build_matrix();
   //C индексом l просто для удобства всяких проверок
@@ -53,9 +70,13 @@ class Mesons_Model {
 
   Eigen::VectorXd get_rho_meson_mass_a();
   Eigen::VectorXd get_atwo_meson_mass_a();
+  Eigen::VectorXd get_aone_meson_mass_a();
+  Eigen::VectorXd get_fzero_meson_mass_a();
 
   Eigen::VectorXd get_rho_meson_mass_num();
   Eigen::VectorXd get_atwo_meson_mass_num();
+  Eigen::VectorXd get_aone_meson_mass_num();
+  Eigen::VectorXd get_fzero_meson_mass_num();
 
   static std::pair<std::vector<T>, std::vector<T>> first_and_second_derivative_num_counter(const std::vector<T>&, double);
 
@@ -111,6 +132,56 @@ Mesons_Model<T>::Mesons_Model(size_t nn, double k, std::function<T(T)> md) : tot
   net = {};
   net_step = z_max / total_net_nodes;
   L = 1.0;
+}
+
+//Инициализация кирального сектора происходит после задания дилатона
+//В дабл кастится вся хуйня потому что киральный сектор позиционируется как дабл
+template <class T>
+void Mesons_Model<T>::initialize_kiral_sector() {
+  std::vector<double> first_factor(net.size());
+  std::vector<double> second_factor(net.size());
+
+  for (NetNode<T>& node : net) {
+    using std::exp, std::pow;
+    first_factor[node.node_id] = static_cast<double>(exp(3 * warp_factor_conv(node.z) - node.dilaton));
+    second_factor[node.node_id] = static_cast<double>(exp(5 * warp_factor_conv(node.z) - node.dilaton));
+
+    //Для начала инициализируем v(z) в соответствие с ассимптотическим предположением
+    node.kiral_sector = static_cast<double>(alpha * node.z + beta * pow(node.z, 3));
+  }
+
+  auto squared_step = net_step * net_step;
+  Eigen::VectorXd deviation_func = Eigen::VectorXd::Zero(total_net_nodes);
+  Eigen::MatrixXd jacobian(total_net_nodes, total_net_nodes);
+  for (size_t iters = 0; iters < 20; iters++) {
+    jacobian.setZero();
+    jacobian(0, 0) = 1.0;
+
+    deviation_func(0) = net[0].kiral_sector.value() - static_cast<double>((alpha * net[0].z + beta * pow(net[0].z, 3)));
+
+    for (size_t i = 1; i < total_net_nodes - 1; i++) {
+      double first_factor_plus = (first_factor[i] + first_factor[i + 1]) / 2.0;
+      double first_factor_minus = (first_factor[i - 1] + first_factor[i]) / 2.0;
+      deviation_func(i) = ((first_factor_plus * (net[i + 1].kiral_sector.value() - net[i].kiral_sector.value()) - first_factor_minus * (net[i].kiral_sector.value() - net[i - 1].kiral_sector.value())) / squared_step
+                                  - second_factor[i] * (-3 * net[i].kiral_sector.value() - k_1 * net[i].kiral_sector.value() * net[i].kiral_sector.value() - k_2 * pow(net[i].kiral_sector.value(), 3)));
+      jacobian(i, i - 1) = first_factor_minus / squared_step;
+      jacobian(i, i + 1) = first_factor_plus / squared_step;
+      jacobian(i, i) = -(first_factor_plus + first_factor_minus) / squared_step - second_factor[i] * (-3 - 2 * k_1 * net[i].kiral_sector.value() - 3 * k_2 * net[i].kiral_sector.value() * net[i].kiral_sector.value());
+    }
+    size_t last = total_net_nodes - 1;
+    deviation_func(last) = 3 * net[last].kiral_sector.value() - 4 * net[last - 1].kiral_sector.value() + net[last - 2].kiral_sector.value();
+    jacobian(last, last) = 3.0;
+    jacobian(last, last-1) = -4.0;
+    jacobian(last, last-2) = 1.0;
+
+    // Решаем плотную систему уравнений
+    Eigen::VectorXd delta = jacobian.partialPivLu().solve(-deviation_func);
+    for (size_t i = 0; i < total_net_nodes; i++) {
+      net[i].kiral_sector = delta(i) + net[i].kiral_sector.value();
+    }
+
+    if (delta.norm() < 1e-8) break;
+  }
 }
 
 //Восстановление вектора дилатонов из его производной, в новой нотации Ф - c домножением на кожффициент
@@ -307,6 +378,46 @@ void Mesons_Model<T>::make_net_atwo_num() {
   }
 }
 
+template <class T>
+void Mesons_Model<T>::make_net_aone() {
+  make_net_rho();
+  initialize_kiral_sector();
+  for (NetNode<T>& node : net) {
+    using std::exp;
+    node.potential += gfive_squared * node.kiral_sector.value() * node.kiral_sector.value() * exp(2 * warp_factor_conv(node.z));
+  }
+}
+
+template <class T>
+void Mesons_Model<T>::make_net_aone_num() {
+  make_net_rho_num();
+  initialize_kiral_sector();
+  for (NetNode<T>& node : net) {
+    using std::exp;
+    node.potential += (gfive_squared * node.kiral_sector.value() * node.kiral_sector.value() * exp(2 * warp_factor_conv(node.z)));
+  }
+}
+
+template <class T>
+void Mesons_Model<T>::make_net_fzero() {
+  make_net_atwo();
+  initialize_kiral_sector();
+  for (NetNode<T>& node : net) {
+    using std::exp;
+    node.potential += (exp(2 * warp_factor_conv(node.z)) * (-3 - 2 * k_1 * node.kiral_sector.value() - 3 * k_2 * node.kiral_sector.value() * node.kiral_sector.value()));
+  }
+}
+
+template <class T>
+void Mesons_Model<T>::make_net_fzero_num() {
+  make_net_atwo_num();
+  initialize_kiral_sector();
+  for (NetNode<T>& node : net) {
+    using std::exp;
+    node.potential += (exp(2 * warp_factor_conv(node.z)) * (-3 - 2 * k_1 * node.kiral_sector.value() - 3 * k_2 * node.kiral_sector.value() * node.kiral_sector.value()));
+  }
+}
+
 //Функция собирающая матрицу оператора
 template <class T>
 Eigen::MatrixXd Mesons_Model<T>::build_matrix_l() {
@@ -372,8 +483,73 @@ Eigen::VectorXd Mesons_Model<T>::get_rho_meson_mass_num() {
 }
 
 template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_atwo_meson_mass_a() {
+  make_net_atwo();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
 Eigen::VectorXd Mesons_Model<T>::get_atwo_meson_mass_num() {
   make_net_atwo_num();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_aone_meson_mass_a() {
+  make_net_aone();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_aone_meson_mass_num() {
+  make_net_aone_num();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_fzero_meson_mass_a() {
+  make_net_fzero();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_fzero_meson_mass_num() {
+  make_net_fzero_num();
   auto Ham = build_matrix();
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
     

@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <optional>
 #pragma once
 template <class T>
 struct NetNode {
@@ -8,6 +9,7 @@ struct NetNode {
   double dilaton = 0.0;
   double dilaton_first_der = 0.0;
   double dilaton_secod_der = 0.0;
+  std::optional<double> kiral_sector;
 
   double potential = 0;
 
