@@ -37,13 +37,32 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(autodiff)
 
-# 5. Сборка твоего проекта
-add_executable(HoloMesons 
-    main.cpp
+message(STATUS "Downloading pybind11...")
+FetchContent_Declare(
+    pybind11
+    GIT_REPOSITORY https://github.com/pybind/pybind11.git
+    GIT_TAG        v2.13.6 # Рекомендуется указывать конкретный стабильный релизный тег
+)
+FetchContent_MakeAvailable(pybind11)
+
+pybind11_add_module(meson_lib
+    bind.cpp
+    function_for_emulator.hpp
 )
 
-add_executable(kfit
-    fitting_k.cpp
+set(TARGET_PYTHON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../emulator")
+
+set_target_properties(meson_lib PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${TARGET_PYTHON_DIR}")
+
+target_include_directories(meson_lib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(meson_lib PRIVATE 
+    Eigen3::Eigen 
+    autodiff::autodiff
+)
+
+add_executable(HoloMesons 
+    testing_heavy_mesons.cpp
 )
 
 # Указываем, где лежат твои заголовочные файлы (.hpp)
@@ -52,7 +71,3 @@ target_include_directories(HoloMesons PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # Подключаем скачанные библиотеки к твоему исполняемому файлу
 target_link_libraries(HoloMesons PRIVATE Eigen3::Eigen autodiff::autodiff)
 
-target_include_directories(kfit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-# Подключаем скачанные библиотеки к твоему исполняемому файлу
-target_link_libraries(kfit PRIVATE Eigen3::Eigen autodiff::autodiff)

@@ -1,18 +1,33 @@
 #include "net_node.hpp"
+#include "base_heavy_mesons_config.hpp"
 #include <algorithm>
 #include <cmath>
 #include <csignal>
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <vector>
 #include <stdexcept>
 #include <autodiff/forward/real.hpp>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
+
 #pragma once
+//В статье L принято единицей
 
 constexpr double epsilon = 1e-10;
+
+//Параметры для расчета альфа и k для параметризации дилатона из статьи
+namespace Parametrs_For_Dilaton_Counter {
+  constexpr double A_ALPHA = 0.054;
+  constexpr double B_ALPHA = 0.8484;
+  constexpr double C_ALPHA = 0.4233;
+
+  constexpr double A_K = 15.2085;
+  constexpr double B_K = 14.8082;
+  constexpr double C_K = 0.0524;
+}
 
 template<class T>
 class Mesons_Model {
@@ -30,6 +45,8 @@ class Mesons_Model {
   double k_2;
   double gfive_squared = 4 * M_PI * M_PI;
 
+  std::optional<HeavyMesonConfig> heavy_meson;
+
   size_t total_net_nodes = 0;
   std::vector<NetNode<T>> net = {};
 
@@ -45,7 +62,7 @@ class Mesons_Model {
   void dilaton_setter();
   void dilaton_setter_num();
 
-  T dilaton(T) const;
+  double dilaton(T) const;
   void inintialise_net();
   T warp_factor_conv(T) const;
 
@@ -65,6 +82,8 @@ class Mesons_Model {
   void make_net_fzero_num();
 
   Eigen::MatrixXd build_matrix();
+
+  Eigen::MatrixXd count_eigenvals();
   //C индексом l просто для удобства всяких проверок
   Eigen::MatrixXd build_matrix_l();
 
@@ -80,6 +99,25 @@ class Mesons_Model {
 
   static std::pair<std::vector<T>, std::vector<T>> first_and_second_derivative_num_counter(const std::vector<T>&, double);
 
+  //Функции для рассчета всего по статье по каким-то причинам не работают, хотя значения альфа и к из самой статьи вполне выполняют пайплайн
+  // static double dilaton_alpha(double);
+  // static double dilaton_k(double);
+
+  T Dilaton_art(T);
+  T Gaude_kinetic_function(T);
+  T Auxiliary_function(T);
+  T article_potential_brick(T);
+
+  T Auxiliary_function_prod(T);
+  T article_potential_brick_prod(T);
+
+  void make_net_exotic();
+  void make_net_exotic_num();
+  Eigen::VectorXd get_exotic_meson_mass_a();
+  Eigen::VectorXd get_exotic_meson_mass_num();
+
+  void make_net_exotic_prod();
+  Eigen::VectorXd get_exotic_meson_mass_prod();
 };
 
 template<class T>
@@ -217,6 +255,12 @@ void Mesons_Model<T>::dilaton_setter() {
     net[i + 1].dilaton = new_val.val();
   }
   std::for_each(net.begin(), net.end(), [this](NetNode<T>& node) {node.dilaton *= k_sw_impact;});
+}
+
+template<class T>
+double Mesons_Model<T>::dilaton(T z) const {
+  double id = static_cast<double>((z - epsilon) / net_step);
+  return static_cast<double> (net[id].dilaton);  
 }
 
 template <class T> 
@@ -457,6 +501,17 @@ Eigen::MatrixXd Mesons_Model<T>::build_matrix() {
 }
 
 template <class T>
+Eigen::MatrixXd Mesons_Model<T>::count_eigenvals() {
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
 Eigen::VectorXd Mesons_Model<T>::get_rho_meson_mass_a() {
   make_net_rho();
   auto Ham = build_matrix();
@@ -550,6 +605,168 @@ Eigen::VectorXd Mesons_Model<T>::get_fzero_meson_mass_a() {
 template <class T>
 Eigen::VectorXd Mesons_Model<T>::get_fzero_meson_mass_num() {
   make_net_fzero_num();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+//Все функции дальнейшего блока нужны для рассчета тяжелых и экзотических мезонов
+//Там используется неквадратичный дилатон, введенный в статье и функция f(z) введенная там же
+// template <class T>
+// double Mesons_Model<T>::dilaton_alpha(double mass) {
+//   using namespace Parametrs_For_Dilaton_Counter;
+//   return A_ALPHA - B_ALPHA * std::exp(-C_ALPHA * mass * mass);
+//   // return 0.54;
+// }
+
+// template <class T> 
+// double Mesons_Model<T>::dilaton_k(double mass) {
+//   using namespace Parametrs_For_Dilaton_Counter;
+//   return A_K - B_K * std::exp(-C_K * mass * mass);
+//   // return 1.8;
+// }
+
+template <class T>
+T Mesons_Model<T>::Dilaton_art(T z) {
+  if (!heavy_meson) {
+    throw std::runtime_error("Масса тяжелого или экзотического мезона с которым должен работать класс не инициализирована");
+  }
+  using std::pow;
+  T base = heavy_meson.value().dilaton_k * z;
+  double exponent = 2.0 - heavy_meson.value().dilaton_alpha;
+  return pow(base, exponent);
+}
+
+//B(z) из статьи
+template <class T>
+T Mesons_Model<T>::Auxiliary_function(T z) {
+  using std::tanh;
+  T dilaton = Dilaton_art(z);
+  T correction = heavy_meson.value().M * z + tanh(1.0 / (heavy_meson.value().M * z) - heavy_meson.value().dilaton_k / heavy_meson.value().sqrt_gamma);
+  return dilaton + correction;
+}
+
+template <class T>
+T Mesons_Model<T>::Auxiliary_function_prod(T z) {
+  using std::tanh;
+  double dilat = dilaton(z);
+  T correction = heavy_meson.value().M * z + tanh(1.0 / (heavy_meson.value().M * z) - heavy_meson.value().dilaton_k / heavy_meson.value().sqrt_gamma);
+  return dilat + correction;
+}
+
+//f(z) из статьи
+template <class T>
+T Mesons_Model<T>::Gaude_kinetic_function(T z) {
+  using std::exp;
+  return exp(-(metric_deformation(z) + Auxiliary_function(z)));
+}
+
+template <class T>
+T Mesons_Model<T>::article_potential_brick(T z) {
+  using std::log;
+  return static_cast<T>(0.5) * (log(static_cast<T>(L)) - Auxiliary_function(z) - log(z));
+}
+
+template <class T>
+T Mesons_Model<T>::article_potential_brick_prod(T z) {
+  using std::log;
+  return static_cast<T>(0.5) * (log(static_cast<T>(L)) - Auxiliary_function_prod(z) - log(z));
+}
+
+template <class T>
+void Mesons_Model<T>::make_net_exotic() {
+  inintialise_net();
+  for (NetNode<T>& node : net) {
+    if (node.node_id == 0 || node.node_id == total_net_nodes - 1) {
+      continue;
+    }
+    auto brick_func = [this](T z_arg) { return article_potential_brick(z_arg); };
+    auto derivs = autodiff::derivatives(brick_func, autodiff::along(1.0), autodiff::at(node.z));
+    auto brick_fd = derivs[1];
+    auto brick_sd = derivs[2];
+    node.potential = brick_fd * brick_fd + brick_sd + static_cast<double>(heavy_meson.value().potential_addition() / (node.z * node.z));
+  }
+}
+
+template <class T>
+void Mesons_Model<T>::make_net_exotic_num() {
+  inintialise_net();
+  std::vector<T> brick(net.size());
+  for (NetNode<T>& node : net) {
+    brick[node.node_id] = article_potential_brick(node.z);
+  }
+
+  auto [brick_first_ders, brick_second_ders] = first_and_second_derivative_num_counter(brick, net_step);
+
+  for (NetNode<T>& node : net) {
+    if (node.node_id == 0 || node.node_id == total_net_nodes - 1) {
+      continue;
+    }
+
+    double brick_fd  = brick_first_ders[node.node_id];
+    double brick_sd  = brick_second_ders[node.node_id];
+
+    node.potential = brick_fd * brick_fd + brick_sd + static_cast<double>(heavy_meson.value().potential_addition() / (node.z * node.z));
+  }
+}
+
+template <class T>
+void Mesons_Model<T>::make_net_exotic_prod() {
+  inintialise_net();
+  dilaton_setter_num();
+  std::vector<T> brick(net.size());
+  for (NetNode<T>& node : net) {
+    brick[node.node_id] = article_potential_brick_prod(node.z);
+  }
+
+  auto [brick_first_ders, brick_second_ders] = first_and_second_derivative_num_counter(brick, net_step);
+
+  for (NetNode<T>& node : net) {
+    if (node.node_id == 0 || node.node_id == total_net_nodes - 1) {
+      continue;
+    }
+
+    double brick_fd  = brick_first_ders[node.node_id];
+    double brick_sd  = brick_second_ders[node.node_id];
+
+    node.potential = brick_fd * brick_fd + brick_sd + static_cast<double>(heavy_meson.value().potential_addition() / (node.z * node.z));
+  }
+}
+
+template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_exotic_meson_mass_a() {
+  make_net_exotic();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_exotic_meson_mass_num() {
+  make_net_exotic_num();
+  auto Ham = build_matrix();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
+    
+  if (solver.info() != Eigen::Success) {
+      throw std::runtime_error("Eigen не смог диагонализировать матрицу Гамильтониана!");
+  }
+  Eigen::VectorXd eigenvalues = solver.eigenvalues();
+  return  eigenvalues;
+}
+
+template <class T>
+Eigen::VectorXd Mesons_Model<T>::get_exotic_meson_mass_prod() {
+  make_net_exotic_prod();
   auto Ham = build_matrix();
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(Ham);
     
