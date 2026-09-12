@@ -7,25 +7,38 @@ import sys
 #В функцию передаются два параметра относящихся к мезонам
 #k_sw_impact и L и они фиксируются(пока с Аней обсудили что просто единицами и если захотим и их подгонять чета чета сделаю)
 
-#Также передается параметризация для которой обучается суррогат
-#После этого передются списки из двух элементов, задающие границы параметров 
-#Также будем считать что Анзац собирается просто передачей в него списка параметров
-
-
-#Нужно генерить тестовую выборку, нужно генерить обучающую выборку(обе построены на размерности пространства входов)
-#Нужна функция инициализирующая эмулятор на обучающей выборке 
-#Нужна функция которая непосредственно занимается обучением до какого-то порога 
-#Нужна функция сохранениея параметров эмулятора и инициализации эмулятора из сохраненных параметров
-#Нужна функция, отдающая MSE отклонение от целевых масс
-#Нужна функция, отдающая градиент MSE
-
-#anzats_constants - некие константы использующиеся для инициализации анзаца и не меняющиеся в процессе
-
-#Также из идей сразу сохранить при генерации валидационный сет в pd_dataframe и по необходимости считывать с него
-#Да и чтобы симуляцию просто так не гонять
-
+#Что может делать пользователь: нужно создать объект класса, после чего просто вызвать Train() и оно обучит эмулятор
 class Emulator_Trainer:
-  def __init__(self, gp_model, gp_likelihood, k_sw_impact, L, Anzats, *bounds, simulator=simulator, anzats_constants=None, start_train_per_dim=10, valid_per_dim=5*10, meson_masses_number=12, bound_percent = 0.5, max_iters = 50000, show_metrics=False, validation_path="validation_data.csv", emulator_path="emulator_state.pth"):
+  "Класс обучающий эмулятор на основе симулятора"
+  "gp_model - класс используемого эмулятора"
+  "gp_likelihood - класс используемого лайклихуда"
+  "Anzats - класс используемого анзатса"
+  "bound_list - torch.tensor состоящий из torch.tensor границ в каждом из которых два элемента"
+  "simulator - используемый симулятор"
+  "start_train_per_dim - Количество стартовых точек/размерность"
+  "valid_per_dim валидационных точек/размерность"
+  "bound_percent - целевая максимальная ошибка эмулятора на целевом наборе"
+  "max_iters - максимальное возможное количество итераций обучения"
+  "emulator_path - путь(а точнее просто название файла) где лежит конфиг эмулятора"
+  def __init__(
+      self, 
+      Anzats, 
+      bounds_list, 
+      gp_model=MultitaskGPModel, 
+      gp_likelihood=gpytorch.likelihoods.MultitaskGaussianLikelihood, 
+      k_sw_impact=1.0, 
+      L=1.0, 
+      simulator=simulator, 
+      anzats_constants=None, 
+      start_train_per_dim=10, 
+      valid_per_dim=5*10, 
+      meson_masses_number=12, 
+      bound_percent=0.5, 
+      max_iters=50000, 
+      show_metrics=False, 
+      validation_path="validation_data.csv", 
+      emulator_path="emulator_state.pth"
+    ):
     self.validation_path = validation_path
     self.emulator_path = emulator_path
     self.show_metrics = show_metrics
@@ -40,10 +53,10 @@ class Emulator_Trainer:
     lower_bounds = []
     upper_bounds = []
 
-    self.anzats_parametrs_size = len(bounds)
-    self.input_dimension = len(bounds)
+    self.anzats_parametrs_size = len(bounds_list)
+    self.input_dimension = len(bounds_list)
 
-    for bound in bounds:
+    for bound in bounds_list:
       lower_bounds.append(bound[0])
       upper_bounds.append(bound[1])
 
@@ -53,8 +66,8 @@ class Emulator_Trainer:
     self.simulator = simulator
     self.anzats_constants = anzats_constants
 
-    self.validation_points_number = valid_per_dim * len(bounds)
-    self.init_training_set_number = start_train_per_dim * len(bounds)
+    self.validation_points_number = valid_per_dim * len(bounds_list)
+    self.init_training_set_number = start_train_per_dim * len(bounds_list)
 
     self.emulator = None
     self.likelihood = None
@@ -82,7 +95,16 @@ class Emulator_Trainer:
 
     self.trained = False
 
+
+  def Train(self):
+    "Выполняет весь цикл работы, при использовании нужно вызывать только эту функцию"
+    self.initialise_validation_set()
+    self.initialise_emulator()
+    self.train_emulator()
+
+
   def generate_data_set(self, number_of_points):
+    "Генерирует дата сеты входные точки на основе латинского гиперкуба, выходы отдает симулятор"
     model_input = base_latinian_sample(self.input_dimension, number_of_points, self.lower_bounds, self.upper_bounds)
     model_output = []
     for input in tqdm(model_input, desc="Генерация данных (симуляция)", leave=False):
@@ -94,6 +116,7 @@ class Emulator_Trainer:
 
 
   def initialise_emulator(self):
+    "Собирает эмулятор для обучения"
     if (self.emulator is not None):
       print("Эмулятор уже инициализирован")
       return
@@ -112,6 +135,7 @@ class Emulator_Trainer:
     trainBFGS(self.emulator, self.likelihood)
 
   def initialise_validation_set(self):
+    "Генерирует валидационные данные"
     if self.validation_x is not None and self.validation_y is not None:
       print("Валидационный сет инициализирован")
       return
@@ -122,7 +146,7 @@ class Emulator_Trainer:
 
 
   def make_one_step(self):
-    "Добавляет одну точку в обучающий набор"
+    "Добавляет одну точку в обучающий набор, и собирает метрики обученности"
     next_x = self.adaptive_learning_using_mse()
     metric_deformation = self.Anzats(next_x)
     next_y = self.simulator(self.L, self.k_sw_impact, metric_deformation)
@@ -149,6 +173,8 @@ class Emulator_Trainer:
 
 
   def train_emulator(self):
+    "Запускает адаптивное обучение эмулятора,"
+    "Работает пока не превысит лимит итераций или не получит необходимый предел ошибки"
     percent_error = 1e10
     iterations = 0
     with tqdm(total=self.max_iters, desc="Обучение эмулятора") as pbar:
@@ -161,9 +187,15 @@ class Emulator_Trainer:
           "Target": f"{self.bound_percent}%"
         })
       self.trained = True
+
+      self.plot_tensor_values(torch.tensor(self.msll_errors, dtype=torch.double), "Mean Standardized Log Loss")
+      self.plot_tensor_values(torch.tensor(self.percent_error_max_arr, dtype=torch.double), "Max error, %")
+
       self.check_ebalo()
+      self.save_emulator_state()
 
   def check_ebalo(self):
+    "Проверяет насколько хорош итоговый эмулятор, требует верификацию обученности"
     msll, percent = self.test_metrics()
     while True:
       print("Обчение завершено")
@@ -184,12 +216,14 @@ class Emulator_Trainer:
       print("Ошибка: введите 'Y' для продолжения или 'N' для выхода.")
 
   def test_metrics(self):
+    "Генерирует msll и максимальную ошибку в процентах для валидации"
     prediction = make_prediction(self.emulator, self.likelihood, self.validation_x_unit)
     msll = MSLL(prediction, self.validation_y_unit)
     max_percent_error = percent_error_max(prediction, self.validation_y_unit)
     return msll, max_percent_error
 
   def save_emulator_state(self):
+    "Сохраняет состояние эмулятора"
     state = {
       'model_state_dict' : self.emulator.state_dict(),
       'likelihood_state_dict' : self.likelihood.state_dict(),
@@ -202,6 +236,7 @@ class Emulator_Trainer:
     }
     torch.save(state, self.emulator_path)
     print(f"Состояние эмулятора сохранено в {self.emulator_path}")
+
 
 
 
@@ -242,6 +277,30 @@ class Emulator_Trainer:
     best_unit_point = candidates_unit[best_id]
 
     return from_unit_cube(best_unit_point, self.lower_bounds, self.upper_bounds)
+
+  def plot_tensor_values(tensor, name, color="blue"):
+
+    if tensor.dim() > 1:
+        tensor = tensor.flatten()
+
+    y_values = tensor.detach().cpu().numpy()
+
+    x_values = range(len(y_values))
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(x_values, y_values, marker='o', linestyle='-', color=color, markersize=4)
+    
+    plt.xlabel("Итерация обучения")
+    plt.ylabel(f"Значение {name}")
+    plt.title(f"Зависимость {name} от итерации обучения")
+    
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.show()
+
+
+
+
 
   # @classmethod
   # def save_data_to_csv(cls, inputs, outputs, filename):
