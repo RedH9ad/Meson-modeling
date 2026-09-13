@@ -1,7 +1,7 @@
 from emulator_realization import *
 from simulator import *
 import torch
-import tqdm
+from tqdm.auto import tqdm
 import pandas as pd
 import sys
 #В функцию передаются два параметра относящихся к мезонам
@@ -60,8 +60,8 @@ class Emulator_Trainer:
       lower_bounds.append(bound[0])
       upper_bounds.append(bound[1])
 
-    self.lower_bounds = torch.tensor(self.lower_bounds, dtype=torch.double)
-    self.upper_bounds = torch.tensor(self.upper_bounds, dtype=torch.double)
+    self.lower_bounds = torch.tensor(lower_bounds, dtype=torch.double)
+    self.upper_bounds = torch.tensor(upper_bounds, dtype=torch.double)
 
     self.simulator = simulator
     self.anzats_constants = anzats_constants
@@ -107,11 +107,11 @@ class Emulator_Trainer:
     "Генерирует дата сеты входные точки на основе латинского гиперкуба, выходы отдает симулятор"
     model_input = base_latinian_sample(self.input_dimension, number_of_points, self.lower_bounds, self.upper_bounds)
     model_output = []
-    for input in tqdm(model_input, desc="Генерация данных (симуляция)", leave=False):
-      metric_deformation = self.Anzats(input)
+    for m_input in tqdm(model_input, desc="Генерация данных", leave=False):
+      metric_deformation = self.Anzats(m_input)
       output = self.simulator(self.L, self.k_sw_impact, metric_deformation)
       model_output.append(output)
-    model_output = torch.tensor(model_output, dtype=torch.double)
+    model_output = torch.stack([t.detach().cpu() for t in model_output]).to(dtype=torch.double)
     return model_input, model_output
 
 
@@ -160,13 +160,13 @@ class Emulator_Trainer:
     self.train_x_real = from_unit_cube(self.train_x, self.lower_bounds, self.upper_bounds)
     self.train_y_real = destandardise_y(self.train_y, self.y_mu, self.y_std)
 
-    self.emulator.set_train_data(inputs=self.train_x, targets=self.train_y)
+    self.emulator.set_train_data(inputs=self.train_x, targets=self.train_y, strict=False)
     trainBFGS(self.emulator, self.likelihood)
     prediction = make_prediction(self.emulator, self.likelihood, self.validation_x_unit)
 
     self.msll_errors.append(MSLL(prediction, self.validation_y_unit).item())
     self.rmse_errors.append(RMSE(prediction, self.validation_y_unit).item())
-    percent_error = percent_error_max(prediction, self.validation_y_unit).item()
+    percent_error = percent_error_max(prediction, self.validation_y_unit, self.y_mu, self.y_std)
     self.percent_error_max_arr.append(percent_error)
 
     return percent_error
@@ -186,13 +186,13 @@ class Emulator_Trainer:
           "Max Err %": f"{percent_error:.2f}%", 
           "Target": f"{self.bound_percent}%"
         })
-      self.trained = True
+    self.trained = True
 
-      self.plot_tensor_values(torch.tensor(self.msll_errors, dtype=torch.double), "Mean Standardized Log Loss")
-      self.plot_tensor_values(torch.tensor(self.percent_error_max_arr, dtype=torch.double), "Max error, %")
+    self.plot_tensor_values(torch.tensor(self.msll_errors, dtype=torch.double), "Mean Standardized Log Loss")
+    self.plot_tensor_values(torch.tensor(self.percent_error_max_arr, dtype=torch.double), "Max error, %")
 
-      self.check_ebalo()
-      self.save_emulator_state()
+    self.check_ebalo()
+    self.save_emulator_state()
 
   def check_ebalo(self):
     "Проверяет насколько хорош итоговый эмулятор, требует верификацию обученности"
@@ -219,7 +219,7 @@ class Emulator_Trainer:
     "Генерирует msll и максимальную ошибку в процентах для валидации"
     prediction = make_prediction(self.emulator, self.likelihood, self.validation_x_unit)
     msll = MSLL(prediction, self.validation_y_unit)
-    max_percent_error = percent_error_max(prediction, self.validation_y_unit)
+    max_percent_error = percent_error_max(prediction, self.validation_y_unit, self.y_mu, self.y_std)
     return msll, max_percent_error
 
   def save_emulator_state(self):
@@ -278,7 +278,7 @@ class Emulator_Trainer:
 
     return from_unit_cube(best_unit_point, self.lower_bounds, self.upper_bounds)
 
-  def plot_tensor_values(tensor, name, color="blue"):
+  def plot_tensor_values(self, tensor, name, color="blue"):
 
     if tensor.dim() > 1:
         tensor = tensor.flatten()

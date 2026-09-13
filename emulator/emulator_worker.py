@@ -31,15 +31,15 @@ class Emulator_Worker:
     self.gp_likelihood = gp_likelihood
     self.emulator_path = emulator_path
 
-    self.lower_bounds = []
-    self.upper_bounds = []
+    lower_bounds = []
+    upper_bounds = []
 
     for bound in bounds_list:
-      self.lower_bounds.append(bound[0])
-      self.upper_bounds.append(bound[1])
+      lower_bounds.append(bound[0])
+      upper_bounds.append(bound[1])
 
-    self.lower_bounds = torch.tensor(self.lower_bounds, dtype=torch.double)
-    self.upper_bounds = torch.tensor(self.upper_bounds, dtype=torch.double)
+    self.lower_bounds = torch.tensor(lower_bounds, dtype=torch.double)
+    self.upper_bounds = torch.tensor(upper_bounds, dtype=torch.double)
 
     self.target_masses = target_masses
     self.target_masses_errors = target_masses_errors
@@ -118,9 +118,4 @@ class Emulator_Worker:
       )[0]
     return xi_squared.item(), grad.squeeze(0)
 
-    
-
-    
-       
-       
     
