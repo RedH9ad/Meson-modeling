@@ -44,7 +44,7 @@ namespace Heavy_Mesons {
   };
 
   HeavyMesonConfig Bottomonium {
-    "Charmonium Upsilon",
+    "Bottomonium Upsilon",
     Quark_Masses::B,
     2.74,
     1.92,

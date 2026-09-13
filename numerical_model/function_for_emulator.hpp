@@ -5,8 +5,8 @@
 #pragma once
 
 namespace Net_Parametrs {
-  constexpr size_t net_nodes = 1000;
-  constexpr double z_max = 10.0;
+  constexpr size_t net_nodes = 100;
+  constexpr double z_max = 6.0;
 }
 
 Eigen::VectorXd heavy_meson_mass_counter(double L, double k_sw_impact, std::function<double(double)> metric_deformation) {

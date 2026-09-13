@@ -16,7 +16,7 @@
 #pragma once
 //В статье L принято единицей
 
-constexpr double epsilon = 1e-10;
+constexpr double epsilon = 1e-9;
 
 //Параметры для расчета альфа и k для параметризации дилатона из статьи
 namespace Parametrs_For_Dilaton_Counter {
@@ -293,7 +293,7 @@ void Mesons_Model<T>::dilaton_setter_num() {
   for (size_t i = 0; i < dilaton_ders.size() - 1; i++) {
     T new_val = net[i].dilaton + dilaton_ders[i] * net_step;
 
-    if (new_val < 0) {
+    if (new_val < 0 || std::isnan(new_val)) {
       throw std::runtime_error("Данный анзац не подходит");
     }
     net[i + 1].dilaton = new_val;
