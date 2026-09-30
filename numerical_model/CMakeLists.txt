@@ -45,6 +45,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pybind11)
 
+message(STATUS "Searching Thread")
+
+find_package(Threads REQUIRED)
+
+
 pybind11_add_module(meson_lib
     bind.cpp
     function_for_emulator.hpp
@@ -59,10 +64,11 @@ target_include_directories(meson_lib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(meson_lib PRIVATE 
     Eigen3::Eigen 
     autodiff::autodiff
+    Threads::Threads
 )
 
 add_executable(HoloMesons 
-    testing_heavy_mesons.cpp
+    testing_times.cpp
 )
 
 # Указываем, где лежат твои заголовочные файлы (.hpp)

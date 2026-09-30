@@ -8,6 +8,8 @@ import sys
 #k_sw_impact и L и они фиксируются(пока с Аней обсудили что просто единицами и если захотим и их подгонять чета чета сделаю)
 
 #Что может делать пользователь: нужно создать объект класса, после чего просто вызвать Train() и оно обучит эмулятор
+#Также при создании класса есть возможность выбора - можно либо задать bound_percent_max если нужно чтобы максимальное процентное отклонение предсказания не превысило
+#Или задать bound_percent_mean - если нужно чтобы среднее не превысило
 class Emulator_Trainer:
   "Класс обучающий эмулятор на основе симулятора"
   "gp_model - класс используемого эмулятора"
@@ -33,7 +35,8 @@ class Emulator_Trainer:
       start_train_per_dim=10, 
       valid_per_dim=5*10, 
       meson_masses_number=12, 
-      bound_percent=0.5, 
+      bound_percent_max=None,
+      bound_percent_mean = 0.5,
       max_iters=50000, 
       show_metrics=False, 
       validation_path="validation_data.csv", 
@@ -82,9 +85,12 @@ class Emulator_Trainer:
 
     self.msll_errors = []
     self.percent_error_max_arr = []
+    self.percent_error_mean_arr = []
     self.rmse_errors = []
 
-    self.bound_percent = bound_percent
+    self.bound_percent_max = bound_percent_max
+    self.bound_percent_mean = bound_percent_mean
+  
     self.max_iters = max_iters
 
     self.train_x = None
@@ -139,6 +145,7 @@ class Emulator_Trainer:
     if self.validation_x is not None and self.validation_y is not None:
       print("Валидационный сет инициализирован")
       return
+    print("Начинаем иниициализацию валидационного сета")
 
     self.validation_x, self.validation_y = self.generate_data_set(self.validation_points_number)
     self.validation_x_unit = to_unit_cube(self.validation_x, self.lower_bounds, self.upper_bounds)
@@ -166,19 +173,28 @@ class Emulator_Trainer:
 
     self.msll_errors.append(MSLL(prediction, self.validation_y_unit).item())
     self.rmse_errors.append(RMSE(prediction, self.validation_y_unit).item())
-    percent_error = percent_error_max(prediction, self.validation_y_unit, self.y_mu, self.y_std)
-    self.percent_error_max_arr.append(percent_error)
+    max_percent_error = percent_error_max(prediction, self.validation_y_unit, self.y_mu, self.y_std)
+    mean_percent_error = percent_error_mean(prediction, self.validation_y_unit, self.y_mu, self.y_std)
+    self.percent_error_max_arr.append(max_percent_error)
+    self.percent_error_mean_arr.append(mean_percent_error)
 
-    return percent_error
+    if (self.bound_percent_max is None):
+      return mean_percent_error
+    return max_percent_error
 
 
   def train_emulator(self):
     "Запускает адаптивное обучение эмулятора,"
     "Работает пока не превысит лимит итераций или не получит необходимый предел ошибки"
+    if (self.bound_percent_max is None):
+      bound_percent = self.bound_percent_mean
+    else:
+      bound_percent = self.bound_percent_max
+
     percent_error = 1e10
     iterations = 0
     with tqdm(total=self.max_iters, desc="Обучение эмулятора") as pbar:
-      while(percent_error > self.bound_percent and iterations < self.max_iters):
+      while(percent_error > bound_percent and iterations < self.max_iters):
         percent_error = self.make_one_step()
         iterations += 1
         pbar.update(1)
@@ -190,7 +206,8 @@ class Emulator_Trainer:
 
     self.plot_tensor_values(torch.tensor(self.msll_errors, dtype=torch.double), "Mean Standardized Log Loss")
     self.plot_tensor_values(torch.tensor(self.percent_error_max_arr, dtype=torch.double), "Max error, %")
-
+    self.plot_tensor_values(torch.tensor(self.percent_error_mean_arr, dtype=torch.double), "Mean error, %") 
+    
     self.check_ebalo()
     self.save_emulator_state()
 

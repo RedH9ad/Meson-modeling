@@ -103,3 +103,8 @@ def percent_error_max(prediction, test_y, y_mean, y_std):
   percent_error = torch.abs(test_y - pred_mean) / torch.abs(test_y)
   return torch.max(percent_error).item() * 100
 
+def percent_error_mean(prediction, test_y, y_mean, y_std):
+  test_y = test_y * y_std + y_mean
+  pred_mean = prediction.mean * y_std + y_mean
+  percent_error = torch.abs(test_y - pred_mean) / torch.abs(test_y)
+  return torch.mean(percent_error).item() * 100

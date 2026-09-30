@@ -1,3 +1,4 @@
+#pragma once
 #include "net_node.hpp"
 #include "base_heavy_mesons_config.hpp"
 #include <algorithm>
@@ -13,7 +14,6 @@
 #include <Eigen/Eigenvalues>
 
 
-#pragma once
 //В статье L принято единицей
 
 constexpr double epsilon = 1e-9;
@@ -61,9 +61,11 @@ class Mesons_Model {
 
   void dilaton_setter();
   void dilaton_setter_num();
+  bool dilaton_setted = false;
 
   double dilaton(T) const;
   void inintialise_net();
+  bool net_initialised = false;
   T warp_factor_conv(T) const;
 
   void initialize_kiral_sector();
@@ -120,6 +122,7 @@ class Mesons_Model {
   Eigen::VectorXd get_exotic_meson_mass_prod();
 };
 
+//Дилатон для всех челов одинаковый есть смысл восстановить один раз
 template<class T>
 std::pair<std::vector<T>, std::vector<T>> Mesons_Model<T>::first_and_second_derivative_num_counter(const std::vector<T>& scale, double net_step) {
   std::vector<T> first_derivatives(scale.size());
@@ -225,6 +228,9 @@ void Mesons_Model<T>::initialize_kiral_sector() {
 //Восстановление вектора дилатонов из его производной, в новой нотации Ф - c домножением на кожффициент
 template <class T>
 void Mesons_Model<T>::dilaton_setter() {
+  if (dilaton_setted == true) {
+    return;
+  }
   std::vector<T> dilaton_ders;
 
   //Рассчет производной дилатона
@@ -255,6 +261,7 @@ void Mesons_Model<T>::dilaton_setter() {
     net[i + 1].dilaton = new_val.val();
   }
   std::for_each(net.begin(), net.end(), [this](NetNode<T>& node) {node.dilaton *= k_sw_impact;});
+  dilaton_setted = true;
 }
 
 template<class T>
@@ -273,6 +280,9 @@ T Mesons_Model<T>::warp_factor_conv(T z) const {
 //Все в численном расчете производных реализуется через центральные разности или их краевые частные случаи
 template<class T>
 void Mesons_Model<T>::dilaton_setter_num() {
+  if (dilaton_setted == true) {
+    return;
+  }
   std::vector<T> metric_deformation_vals(net.size());
   std::vector<T> dilaton_ders;
 
@@ -284,7 +294,11 @@ void Mesons_Model<T>::dilaton_setter_num() {
   auto [md_first_ders, md_second_ders] = first_and_second_derivative_num_counter(metric_deformation_vals, net_step);
   for (NetNode<T>& node : net) {
     using std::sqrt;
-    auto dilaton_first_der = sqrt(6 * (md_first_ders[node.node_id] * md_first_ders[node.node_id] - md_second_ders[node.node_id] - 2 * md_first_ders[node.node_id] / node.z));
+    auto dilaton_first_der_raw = 6 * (md_first_ders[node.node_id] * md_first_ders[node.node_id] - md_second_ders[node.node_id] - 2 * md_first_ders[node.node_id] / node.z);
+    if (dilaton_first_der_raw < 0) {
+      throw std::runtime_error("Подкоренное выражение производной дилатона < 0, данный анзац не подходит");
+    }
+    auto dilaton_first_der = sqrt(dilaton_first_der_raw);
     dilaton_ders.push_back(dilaton_first_der);
     node.dilaton_first_der = k_sw_impact * dilaton_first_der;
   }
@@ -293,9 +307,9 @@ void Mesons_Model<T>::dilaton_setter_num() {
   for (size_t i = 0; i < dilaton_ders.size() - 1; i++) {
     T new_val = net[i].dilaton + dilaton_ders[i] * net_step;
 
-    if (new_val < 0 || std::isnan(new_val)) {
-      throw std::runtime_error("Данный анзац не подходит");
-    }
+    // if (new_val < 0 || std::isnan(new_val)) {
+    //   throw std::runtime_error("Данный анзац не подходит");
+    // }
     net[i + 1].dilaton = new_val;
   }
   std::for_each(net.begin(), net.end(), [this](NetNode<T>& node) {node.dilaton *= k_sw_impact;});
@@ -311,17 +325,22 @@ void Mesons_Model<T>::dilaton_setter_num() {
       node.dilaton_secod_der = (net[node.node_id + 1].dilaton_first_der - net[node.node_id - 1].dilaton_first_der) / (2 * net_step);
     }
   }
+  dilaton_setted = true;
 }
 
 //Инициализация сетки с костылем для того чтобы избегать занулений
 template <class T>
 void Mesons_Model<T>::inintialise_net() {
+  if (net_initialised == true) {
+    return;
+  }
   net.clear();
   for (size_t i = 0; i < total_net_nodes; i++) {
     double current_z = epsilon + i * net_step;
     T z_val = static_cast<T>((current_z));
     net.emplace_back(z_val, i);
   }
+  net_initialised = true;
 }
 
 //Сетка через автодиф для ро мезонов

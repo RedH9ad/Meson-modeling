@@ -281,6 +281,10 @@ class ParametricAnsatzA(torch.nn.Module):
         z: torch.Tensor
     ) -> torch.Tensor:
 
+        if not isinstance(z, torch.Tensor):
+            z = torch.tensor(z, dtype=torch.double)
+        
+
         z = z.to(
             dtype=self.theta.dtype,
             device=self.theta.device
