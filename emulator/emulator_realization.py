@@ -10,12 +10,15 @@ class MultitaskGPModel(gpytorch.models.ExactGP):
   def __init__(self, train_x, train_y, likelihood):
     super(MultitaskGPModel, self).__init__(train_x, train_y, likelihood)
     self.mean_module = gpytorch.means.MultitaskMean(
-      gpytorch.means.ConstantMean(), num_tasks=12
+      gpytorch.means.ConstantMean(), num_tasks=3
     )
+
+    kernel = gpytorch.kernels.MaternKernel(nu=2.5, ard_num_dims=train_x.shape[-1], batch_shape=torch.Size([4]))
       
     self.covar_module = gpytorch.kernels.MultitaskKernel(
-      gpytorch.kernels.MaternKernel(nu=2.5, ard_num_dims=train_x.shape[-1]), num_tasks=12, rank=5,
+      kernel, num_tasks=3, rank=3, batch_shape=torch.Size([4])
     )
+
   def forward(self, x):
     mean_x = self.mean_module(x)
     covar_x = self.covar_module(x)
@@ -91,6 +94,7 @@ def RMSE(prediction, test_y):
   return rmse
 
 def RMSE_M(prediction, test_y, y_mean, y_std):
+  
   test_y = test_y * y_std + y_mean
   pred_mean = prediction.mean * y_std + y_mean
 
@@ -108,3 +112,13 @@ def percent_error_mean(prediction, test_y, y_mean, y_std):
   pred_mean = prediction.mean * y_std + y_mean
   percent_error = torch.abs(test_y - pred_mean) / torch.abs(test_y)
   return torch.mean(percent_error).item() * 100
+
+def format_y_to_batch(y_tensor):
+  N = y_tensor.shape[0]
+  return y_tensor.view(N, 4, 3).permute(1, 0, 2).contiguous()
+
+def format_y_from_batch(y_batch):
+  return y_batch.permute(1, 0, 2).contiguous().view(-1, 12)
+
+def format_x_to_batch(x_tensor):
+  return x_tensor.unsqueeze(0).expand(4, -1, -1).contiguous()

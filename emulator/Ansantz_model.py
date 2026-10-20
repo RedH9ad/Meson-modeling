@@ -189,6 +189,7 @@ class ParametricAnsatzA(torch.nn.Module):
 
     def __init__(self, theta: torch.Tensor):
         super().__init__()
+        self.theta_temp = theta
 
         if not isinstance(theta, torch.Tensor):
             raise TypeError(
@@ -229,6 +230,7 @@ class ParametricAnsatzA(torch.nn.Module):
         self.theta = torch.nn.Parameter(
             theta.detach().clone()
         )
+        
 
     # ------------------------------------------------------------
     # Удобный конструктор из «человеческих» coef / scale
@@ -379,6 +381,7 @@ class ChenHuangAnsatz(torch.nn.Module):
 
     PARAMETER_NAMES = ("a", "b", "c", "d", "k")
     N_PARAMETERS = 5
+    DEFAULT_G5: float = 0.885
 
     # индексы параметров, которые обязаны быть > 0 (a, b)
     POSITIVE_INDICES = (0, 1)
@@ -387,9 +390,10 @@ class ChenHuangAnsatz(torch.nn.Module):
     def __init__(
         self,
         theta: torch.Tensor,
-        G5: float
+        G5: float = DEFAULT_G5
     ):
         super().__init__()
+        self.theta_temp = theta
 
         # ====================================================
         # Проверка theta

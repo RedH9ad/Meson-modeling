@@ -18,6 +18,8 @@ set(AUTODIFF_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(AUTODIFF_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(AUTODIFF_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
 set(AUTODIFF_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(SPECTRA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SPECTRA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 # 3. Скачиваем Eigen3
 message(STATUS "Downloading Eigen3...")
@@ -45,6 +47,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pybind11)
 
+message(STATUS "Downloading SPECTRA")
+FetchContent_Declare(
+    spectra
+    GIT_REPOSITORY https://github.com/yixuan/spectra.git
+    GIT_TAG        v1.0.1  # либо нужный релизный тег / хэш коммита
+)
+FetchContent_MakeAvailable(spectra)
+
 message(STATUS "Searching Thread")
 
 find_package(Threads REQUIRED)
@@ -60,20 +70,21 @@ set(TARGET_PYTHON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../emulator")
 set_target_properties(meson_lib PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${TARGET_PYTHON_DIR}")
 
-target_include_directories(meson_lib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(meson_lib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/Ansatzes)
 target_link_libraries(meson_lib PRIVATE 
     Eigen3::Eigen 
     autodiff::autodiff
     Threads::Threads
+    Spectra
 )
 
 add_executable(HoloMesons 
-    testing_times.cpp
+    testing_anz.cpp
 )
 
 # Указываем, где лежат твои заголовочные файлы (.hpp)
-target_include_directories(HoloMesons PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(HoloMesons PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/Ansatzes)
 
 # Подключаем скачанные библиотеки к твоему исполняемому файлу
-target_link_libraries(HoloMesons PRIVATE Eigen3::Eigen autodiff::autodiff)
+target_link_libraries(HoloMesons PRIVATE Eigen3::Eigen autodiff::autodiff Threads::Threads Spectra)
 

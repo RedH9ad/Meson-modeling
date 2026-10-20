@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 #include <stdexcept>
 #include <autodiff/forward/real.hpp>
@@ -14,9 +15,10 @@
 #include <Eigen/Eigenvalues>
 
 
+
 //В статье L принято единицей
 
-constexpr double epsilon = 1e-9;
+constexpr double epsilon = 1e-4;
 
 //Параметры для расчета альфа и k для параметризации дилатона из статьи
 namespace Parametrs_For_Dilaton_Counter {
@@ -112,6 +114,10 @@ class Mesons_Model {
 
   T Auxiliary_function_prod(T);
   T article_potential_brick_prod(T);
+    
+  double Auxiliary_function_prod_anz(double);
+  double article_potential_brick_anz(double);
+  void make_net_exotic_prod_anz();
 
   void make_net_exotic();
   void make_net_exotic_num();
@@ -243,7 +249,7 @@ void Mesons_Model<T>::dilaton_setter() {
 
     auto dilaton_first_der_raw = 6 * (md_fd * md_fd - md_sd - 2 * md_fd / node.z);
     if (dilaton_first_der_raw < 0) {
-      throw std::runtime_error("Подкоренное выражение производной дилатона < 0, данный анзац не подходит");
+      throw std::runtime_error("Подкоренное выражение производной дилатона < 0, данный анзац не подходит. Вырождение в " + std::to_string(node.node_id));
     }
     auto dilaton_first_der = sqrt(dilaton_first_der_raw);
     auto dilaton_second_der = 3 * (2 * md_fd * md_sd - md_td - 2 * md_sd / node.z + 2 * md_fd / (node.z * node.z)) / dilaton_first_der;
@@ -296,11 +302,11 @@ void Mesons_Model<T>::dilaton_setter_num() {
     using std::sqrt;
     auto dilaton_first_der_raw = 6 * (md_first_ders[node.node_id] * md_first_ders[node.node_id] - md_second_ders[node.node_id] - 2 * md_first_ders[node.node_id] / node.z);
     if (dilaton_first_der_raw < 0) {
-      throw std::runtime_error("Подкоренное выражение производной дилатона < 0, данный анзац не подходит");
+      throw std::runtime_error("Подкоренное выражение производной дилатона < 0, данный анзац не подходит вырождение в " + std::to_string(node.node_id));
     }
     auto dilaton_first_der = sqrt(dilaton_first_der_raw);
     dilaton_ders.push_back(dilaton_first_der);
-    node.dilaton_first_der = k_sw_impact * dilaton_first_der;
+    node.dilaton_first_der = static_cast<double>(k_sw_impact * dilaton_first_der);
   }
  
   net[0].dilaton = 0;
@@ -310,7 +316,7 @@ void Mesons_Model<T>::dilaton_setter_num() {
     // if (new_val < 0 || std::isnan(new_val)) {
     //   throw std::runtime_error("Данный анзац не подходит");
     // }
-    net[i + 1].dilaton = new_val;
+    net[i + 1].dilaton = static_cast<double>(new_val);
   }
   std::for_each(net.begin(), net.end(), [this](NetNode<T>& node) {node.dilaton *= k_sw_impact;});
   
@@ -678,6 +684,14 @@ T Mesons_Model<T>::Auxiliary_function_prod(T z) {
   return dilat + correction;
 }
 
+template <class T>
+double Mesons_Model<T>::Auxiliary_function_prod_anz(double z) {
+  using std::tanh;
+  double dilat = dilaton(z);
+  double correction = heavy_meson.value().M * z + tanh(1.0 / (heavy_meson.value().M * z) - heavy_meson.value().dilaton_k / heavy_meson.value().sqrt_gamma);
+  return dilat + correction;
+}
+
 //f(z) из статьи
 template <class T>
 T Mesons_Model<T>::Gaude_kinetic_function(T z) {
@@ -695,6 +709,11 @@ template <class T>
 T Mesons_Model<T>::article_potential_brick_prod(T z) {
   using std::log;
   return static_cast<T>(0.5) * (log(static_cast<T>(L)) - Auxiliary_function_prod(z) - log(z));
+}
+
+template <class T>
+double Mesons_Model<T>::article_potential_brick_anz(double z) {
+  return 0.5 * (std::log(L) - Auxiliary_function_prod_anz(z) - std::log(z));
 }
 
 template <class T>
@@ -750,10 +769,34 @@ void Mesons_Model<T>::make_net_exotic_prod() {
       continue;
     }
 
-    double brick_fd  = brick_first_ders[node.node_id];
-    double brick_sd  = brick_second_ders[node.node_id];
+    T brick_fd  = brick_first_ders[node.node_id];
+    T brick_sd  = brick_second_ders[node.node_id];
 
-    node.potential = brick_fd * brick_fd + brick_sd + static_cast<double>(heavy_meson.value().potential_addition() / (node.z * node.z));
+    node.potential = static_cast<double>(brick_fd * brick_fd + brick_sd + static_cast<double>(heavy_meson.value().potential_addition() / (node.z * node.z)));
+  }
+}
+
+
+template <class T>
+void Mesons_Model<T>::make_net_exotic_prod_anz() {
+  inintialise_net();
+  dilaton_setter();
+  std::vector<T> brick(net.size());
+  for (NetNode<T>& node : net) {
+    brick[node.node_id] = article_potential_brick_anz(static_cast<double>(node.z));
+  }
+
+  auto [brick_first_ders, brick_second_ders] = first_and_second_derivative_num_counter(brick, net_step);
+
+  for (NetNode<T>& node : net) {
+    if (node.node_id == 0 || node.node_id == total_net_nodes - 1) {
+      continue;
+    }
+
+    T brick_fd  = brick_first_ders[node.node_id];
+    T brick_sd  = brick_second_ders[node.node_id];
+
+    node.potential = static_cast<double>(brick_fd * brick_fd + brick_sd + static_cast<double>(heavy_meson.value().potential_addition() / (node.z * node.z)));
   }
 }
 

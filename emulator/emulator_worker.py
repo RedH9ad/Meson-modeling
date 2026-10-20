@@ -1,4 +1,4 @@
-from emulator_realization import *
+from batch_emulator import *
 from simulator import *
 import torch
 import tqdm
@@ -18,12 +18,32 @@ class Emulator_Worker:
   "bound_percent - целевая максимальная ошибка эмулятора на целевом наборе"
   "emulator_path - путь(а точнее просто название файла) где лежит конфиг эмулятора"
   def __init__(
-  self, 
-  target_masses, 
-  target_masses_errors, 
+  self,
   bounds_list, 
-  gp_model = MultitaskGPModel, 
-  gp_likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood, 
+  gp_model = MesonGP,
+  gp_likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood,
+  target_masses = torch.tensor(
+      [
+          # Heavy_Mesons::Charmonium
+          3.140,
+          3.6569,
+          4.0558,
+          # Heavy_Mesons::Bottomonium
+          9.5065,
+          9.8290,
+          10.2272,
+          # Heavy_Mesons::Tetraquark
+          3.8901,
+          4.1895,
+          4.4446,
+          # Heavy_Mesons::Hybrid_Meson
+          1.3547,
+          1.6181,
+          1.8499,
+      ],
+      dtype=torch.double,
+  ),
+  target_masses_errors = torch.zeros(12, dtype=torch.double),
   bound_percent=0.5, 
   emulator_path="emulator_state.pth"
   ):
@@ -41,8 +61,12 @@ class Emulator_Worker:
     self.lower_bounds = torch.tensor(lower_bounds, dtype=torch.double)
     self.upper_bounds = torch.tensor(upper_bounds, dtype=torch.double)
 
-    self.target_masses = target_masses
-    self.target_masses_errors = target_masses_errors
+    self.target_masses = torch.as_tensor(
+            target_masses, dtype=torch.double
+    ).view(1, -1)
+    self.target_masses_errors = torch.as_tensor(
+        target_masses_errors, dtype=torch.double
+    ).view(1, -1)
 
     self.bound_percent = bound_percent
 
@@ -80,20 +104,39 @@ class Emulator_Worker:
     self.y_mu = state['y_mu']
     self.y_std = state['y_std']
 
-    self.likelihood = self.gp_likelihood(num_tasks=len(self.target_masses)).double()
+    self.likelihood = self.gp_likelihood(num_tasks=3, batch_shape=torch.Size([4])).double()
     self.likelihood.load_state_dict(likelihood_state)
 
     self.emulator = self.gp_model(self.train_x_unit, self.train_y_unit, self.likelihood).double()
     self.emulator.load_state_dict(emulator_state)
-    print("Эмулятор готов к работе")
 
+    self.emulator.eval()
+    self.likelihood.eval()
+    print("Эмулятор готов к работе")
+      
   def return_mass_values(self, parametrs):
-    parametrs = to_unit_cube(parametrs, self.lower_bounds, self.upper_bounds)
-    prediction = make_prediction(self.emulator, self.likelihood, parametrs)
-    real_masses = destandardise_y(prediction.mean, self.y_mu, self.y_std)
+    if not isinstance(parametrs, torch.Tensor):
+      parametrs = torch.tensor(parametrs, dtype=torch.double)
+    else:
+      parametrs = parametrs.to(dtype=torch.double)
+
+    if parametrs.dim() == 1:
+      parametrs = parametrs.unsqueeze(0)
+
+    parametrs_unit = to_unit_cube(
+        parametrs, self.lower_bounds, self.upper_bounds
+    )
+  
+    prediction = make_prediction(
+      self.emulator, self.likelihood, parametrs_unit
+    )
+
+    pred_mean_flat = format_y_from_batch(prediction.mean)
+    real_masses = destandardise_y(pred_mean_flat, self.y_mu, self.y_std)
+
     return real_masses.squeeze(0).detach()
 
-  def return_xi_squared_and_grad(self, parametrs):
+  def return_rmse_and_grad(self, parametrs):
     if not isinstance(parametrs, torch.Tensor):
       parametrs = torch.tensor(parametrs, dtype=torch.double)
     else:
@@ -106,16 +149,19 @@ class Emulator_Worker:
 
     parametrs_unit = to_unit_cube(parametrs, self.lower_bounds, self.upper_bounds)
     prediction = make_prediction(self.emulator, self.likelihood, parametrs_unit)
-    mass_values = destandardise_y(prediction.mean, self.y_mu, self.y_std)
-    temp = (mass_values - self.target_masses) / self.target_masses_errors
-    xi_squared = torch.sum(temp**2)
+    mass_values = destandardise_y(format_y_from_batch(prediction.mean), self.y_mu, self.y_std)
+
+    # pred_var_unit = format_y_from_batch(prediction.variance)
+    # emulator_var = pred_var_unit * (self.y_std**2)
+    # total_var = (self.target_masses_errors**2) + emulator_var.detach()
+
+    diff = (mass_values - self.target_masses)
+    mse = torch.mean((diff / self.target_masses)**2)
 
     grad = torch.autograd.grad(
-          outputs=xi_squared,
+          outputs=mse,
           inputs=parametrs,
           retain_graph=False,
           create_graph=False
       )[0]
-    return xi_squared.item(), grad.squeeze(0)
-
-    
+    return mse.item(), grad.squeeze(0)

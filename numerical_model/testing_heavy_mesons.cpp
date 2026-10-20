@@ -15,7 +15,7 @@ int main() {
     return -(C_WARP / 8.0) * z * z;
   };
 
-  const size_t net_nodes = 2000;
+  const size_t net_nodes = 1400;
   const double z_max_val = 10.0;
   const double dummy_k   = 1.0; 
   std::vector<HeavyMesonConfig> targets{
