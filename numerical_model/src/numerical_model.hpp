@@ -19,7 +19,7 @@
 
 //В статье L принято единицей
 
-constexpr double epsilon = 1e-7;
+
 
 //Параметры для расчета альфа и k для параметризации дилатона из статьи
 namespace Parametrs_For_Dilaton_Counter {
@@ -40,6 +40,9 @@ class Mesons_Model : public HardWallMixin<Mesons_Model<T>> {
   double k_sw_impact = 0.0;
   double L = 1.0;
 
+  //МЕДЖИК ХУЙНЯ
+  double epsilon = 1e-7;
+
   //constants
   double alpha;
   double beta;
@@ -56,6 +59,8 @@ class Mesons_Model : public HardWallMixin<Mesons_Model<T>> {
   std::function<T(T)> metric_deformation;
 
  public:
+ //Для миксина делаем T видимым
+  using value_type = T;
   Mesons_Model() = default;
   Mesons_Model(size_t, double, double, std::function<T(T)>);
   Mesons_Model(size_t, double, double, double, std::function<T(T)>);
@@ -274,17 +279,8 @@ void Mesons_Model<T>::dilaton_setter() {
 
 template<class T>
 double Mesons_Model<T>::dilaton(T z) const {
-  double z_d = static_cast<double>(z);
-  if (z_d <= epsilon) return net.front().dilaton;
-  if (z_d >= z_max)   return net.back().dilaton;
-
-  double pos = (z_d - epsilon) / net_step;
-  size_t idx = static_cast<size_t>(std::floor(pos));
-  if (idx >= net.size() - 1) {
-    return net.back().dilaton;
-  }
-  double frac = pos - static_cast<double>(idx);
-  return (1.0 - frac) * net[idx].dilaton + frac * net[idx + 1].dilaton;
+  double id = static_cast<double>((z - epsilon) / net_step);
+  return static_cast<double> (net[id].dilaton); 
 }
 
 template <class T> 

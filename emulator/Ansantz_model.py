@@ -46,6 +46,7 @@ class ModelParams:
     s_BH, F[zh,mu] будут автоматически пересчитаны через тот же самый
     torch.autograd конвейер. См. также from_custom_A() и from_dilaton()
     ниже - два готовых способа заполнить это поле.
+
     """
     m: float
     n: float
@@ -205,11 +206,11 @@ class ParametricAnsatzA(torch.nn.Module):
 
         expected_size = 2 * self.n_terms
 
-        if theta.numel() != expected_size:
-            raise ValueError(
-                f"Ожидалось {expected_size} параметров, "
-                f"получено {theta.numel()}."
-            )
+        # if theta.numel() != expected_size:
+        #     raise ValueError(
+        #         f"Ожидалось {expected_size} параметров, "
+        #         f"получено {theta.numel()}."
+        #     )
 
         if not torch.is_floating_point(theta):
             raise TypeError(

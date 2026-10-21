@@ -29,6 +29,12 @@ class HardWallMixin {
   void initialise_mass_addition_art();
   void initialise_system_art();
 
+
+  double kinetic_function_sturm(double z);
+  void initialise_ext_dilaton();
+  double auxularity_function_sturm(double z);
+  
+
  private:
  //В качестве полей здесь будут выступать векторы t = (main_coef(z_{i+0.5} / net_step)) 
  //Вектор weights - w из инструкции
@@ -36,7 +42,9 @@ class HardWallMixin {
  std::vector<double> flux_coeffs {};
  std::vector<double> weights {};
  std::vector<double> mass_additions {};
-
+ //Значения дилатона на расширенной сетке. Вектор размера 2 * net_nodes
+ std::vector<double> dilaton_ext_vals {};
+ bool dilaton_setted_sturm = false;
 };
 
 

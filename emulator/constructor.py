@@ -241,10 +241,10 @@ class Emulator_Trainer:
     train_x_unit = to_unit_cube(self.train_x, self.lower_bounds, self.upper_bounds)
     train_y_unit = standardise_y(self.train_y, self.y_mu, self.y_std)
 
-    # self.likelihood = self.gp_likelihood_class(num_tasks=self.meson_masses_number // 4, batch_shape=torch.Size([4])).double()
-    # self.emulator = self.gp_model(train_x_unit, format_y_to_batch(train_y_unit), self.likelihood).double()
-    # print("Эмулятор создан, стартовый подгон гиперпарметров")
-    # trainBFGS(self.emulator, self.likelihood)
+    self.likelihood = self.gp_likelihood_class(num_tasks=self.meson_masses_number // 4, batch_shape=torch.Size([4])).double()
+    self.emulator = self.gp_model(train_x_unit, format_y_to_batch(train_y_unit), self.likelihood).double()
+    print("Эмулятор создан, стартовый подгон гиперпарметров")
+    trainBFGS(self.emulator, self.likelihood)
 
   def initialise_validation_set(self):
     "Генерирует валидационные данные"
