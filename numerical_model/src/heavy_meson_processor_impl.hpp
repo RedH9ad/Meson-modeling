@@ -48,6 +48,23 @@ Eigen::VectorXd Heavy_Mesons_Processor<T>::get_heavy_meson_mass_anz() {
   return result;
 }
 
+
+template <class T> 
+Eigen::VectorXd Heavy_Mesons_Processor<T>::get_heavy_meson_mass_anz_sturm() {
+  auto pairs_vector = make_matrixies_ready_anz_sturm();
+  Eigen::VectorXd result(3 * meson_count);
+  std::vector<std::thread> threads;
+  for (size_t id = 0; id < meson_count; id++) {
+    threads.emplace_back(&Heavy_Mesons_Processor<T>::process_eigenvals_sturm, this, id, std::cref(pairs_vector[id]), std::ref(result));
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  return result;
+}
+
+
 template <class T> 
 Eigen::VectorXd Heavy_Mesons_Processor<T>::get_heavy_meson_mass_num_spectra() {
   auto matrixies = make_matrixies_ready_num();
@@ -72,6 +89,14 @@ void Heavy_Mesons_Processor<T>::process_eigenvals(size_t id, const Eigen::Matrix
 }
 
 template <class T>
+void Heavy_Mesons_Processor<T>::process_eigenvals_sturm(size_t id, const std::pair<Eigen::VectorXd, Eigen::VectorXd>& diags, Eigen::VectorXd& result) {
+  auto masses = get_eigenvals_sturm(diags).array().sqrt();
+  for (size_t i = 0; i < 3; i++) {
+    result(3 * id + i) = masses(i);
+  }
+}
+
+template <class T>
 void Heavy_Mesons_Processor<T>::process_eigenvals_spectra(size_t id, const Eigen::MatrixXd& Ham, Eigen::VectorXd& result) {
   auto masses = get_eigenvals_spectra(Ham, 3).array().sqrt();
   for (size_t i = 0; i < 3; i++) {
@@ -87,6 +112,18 @@ Eigen::VectorXd Heavy_Mesons_Processor<T>::get_eigenvals(const Eigen::MatrixXd& 
   }
   Eigen::VectorXd eigenvalues = solver.eigenvalues();
   return  eigenvalues;
+}
+
+template <class T>
+Eigen::VectorXd Heavy_Mesons_Processor<T>::get_eigenvals_sturm(const std::pair<Eigen::VectorXd, Eigen::VectorXd>& diags) {
+  const auto& [diag, subdiag] = diags;
+  
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver;
+  solver.computeFromTridiagonal(diag, subdiag, Eigen::EigenvaluesOnly);
+  if (solver.info() != Eigen::Success) {
+    throw std::runtime_error("HardWallMixin: Failed to compute eigenvalues (solver did not converge).");
+  }
+  return solver.eigenvalues();
 }
 
 template <class T>
@@ -135,6 +172,28 @@ std::vector<Eigen::MatrixXd> Heavy_Mesons_Processor<T>::make_matrixies_ready_anz
   }
   return matrixies_vector;
 }
+
+template <class T> 
+std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> Heavy_Mesons_Processor<T>::make_matrixies_ready_anz_sturm() {
+  std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> diags_pairs;
+  for (auto& meson : mesons) {
+    model.heavy_meson = meson;
+    model.initialise_system();
+    diags_pairs.emplace_back(model.build_threediag_matrix_vectors());
+  }
+  return diags_pairs;
+}
+
+// template <class T> 
+// std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> Heavy_Mesons_Processor<T>::make_matrixies_ready_anz_sturm() {
+//   std::vector<std::pair<Eigen::VectorXd, Eigen::VectorXd>> diags_pairs;
+//   for (auto& meson : mesons) {
+//     model.heavy_meson = meson;
+//     model.initialise_system_art();
+//     diags_pairs.emplace_back(model.build_threediag_matrix_vectors());
+//   }
+//   return diags_pairs;
+// }
 
 template <class T>
 void Heavy_Mesons_Processor<T>::check_process_times(const HeavyMesonConfig& meson) {

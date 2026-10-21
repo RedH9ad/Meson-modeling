@@ -12,8 +12,8 @@ int main() {
     return -(C_WARP / 8.0) * z * z;
   };
   
-  const size_t net_nodes = 500;
-  const double z_max_val = 10.0;
+  const size_t net_nodes = 3000;
+  const double z_max_val = 20.0;
   const double dummy_k   = 1.0; 
   std::vector<HeavyMesonConfig> targets{
     Heavy_Mesons::Charmonium, 
@@ -23,17 +23,17 @@ int main() {
   };
   auto model_num = Mesons_Model<autodiff::real3rd>(net_nodes, z_max_val, dummy_k, deform_num);
   auto processor = Heavy_Mesons_Processor(model_num, targets);
-  processor.check_process_times(targets[0]);
-  auto res = processor.get_heavy_meson_mass_anz();
+  // processor.check_process_times(targets[0]);
+  auto res = processor.get_heavy_meson_mass_anz_sturm();
   std::cout << res;
 
-  auto model = Mesons_Model<double>(net_nodes, z_max_val, dummy_k, deform);
-  auto process = Heavy_Mesons_Processor(model, targets);
-  process.check_process_times(targets[0]);
-  auto res_1 = process.get_heavy_meson_mass_num();
-  std::cout << res_1;
-  std::cout << "Хуй:" << res.size();
-  for (auto& point : res_1) {
-    std::cout << point;
-  }
+  // auto model = Mesons_Model<double>(net_nodes, z_max_val, dummy_k, deform);
+  // auto process = Heavy_Mesons_Processor(model, targets);
+  // process.check_process_times(targets[0]);
+  // auto res_1 = process.get_heavy_meson_mass_num();
+  // std::cout << res_1;
+  // std::cout << "Хуй:" << res.size();
+  // for (auto& point : res_1) {
+  //   std::cout << point;
+  // }
 }

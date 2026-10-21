@@ -13,12 +13,13 @@
 #include <autodiff/forward/real.hpp>
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
+#include "hard_wall_mixin.hpp"
 
 
 
 //В статье L принято единицей
 
-constexpr double epsilon = 1e-4;
+constexpr double epsilon = 1e-7;
 
 //Параметры для расчета альфа и k для параметризации дилатона из статьи
 namespace Parametrs_For_Dilaton_Counter {
@@ -32,7 +33,7 @@ namespace Parametrs_For_Dilaton_Counter {
 }
 
 template<class T>
-class Mesons_Model {
+class Mesons_Model : public HardWallMixin<Mesons_Model<T>> {
  public:
   double net_step = 0.0;
   double z_max = 0.0;
@@ -108,7 +109,8 @@ class Mesons_Model {
   // static double dilaton_k(double);
 
   T Dilaton_art(T);
-  T Gaude_kinetic_function(T);
+  double kinetic_function(double);
+  double kinetic_function_art(double);
   T Auxiliary_function(T);
   T article_potential_brick(T);
 
@@ -163,21 +165,21 @@ std::pair<std::vector<T>, std::vector<T>> Mesons_Model<T>::first_and_second_deri
 template <class T>
 Mesons_Model<T>::Mesons_Model(size_t nn, double zm, double k, std::function<T(T)> md) : total_net_nodes(nn), z_max(zm), k_sw_impact(k), metric_deformation(md) {
   net = {};
-  net_step = z_max / total_net_nodes;
+  net_step = (z_max - epsilon) / static_cast<double>(total_net_nodes - 1);
   L = 1.0;
 }
 
 template <class T>
 Mesons_Model<T>::Mesons_Model(size_t nn, double zm, double k, double L, std::function<T(T)> md) : total_net_nodes(nn), z_max(zm), k_sw_impact(k), L(L), metric_deformation(md) {
   net = {};
-  net_step = z_max / total_net_nodes;
+  net_step = (z_max - epsilon) / static_cast<double>(total_net_nodes - 1);
 }
 
 template <class T>
 Mesons_Model<T>::Mesons_Model(size_t nn, double k, std::function<T(T)> md) : total_net_nodes(nn), k_sw_impact(k), metric_deformation(md) {
   z_max = 10 / k;
   net = {};
-  net_step = z_max / total_net_nodes;
+  net_step = (z_max - epsilon) / static_cast<double>(total_net_nodes - 1);
   L = 1.0;
 }
 
@@ -272,8 +274,17 @@ void Mesons_Model<T>::dilaton_setter() {
 
 template<class T>
 double Mesons_Model<T>::dilaton(T z) const {
-  double id = static_cast<double>((z - epsilon) / net_step);
-  return static_cast<double> (net[id].dilaton);  
+  double z_d = static_cast<double>(z);
+  if (z_d <= epsilon) return net.front().dilaton;
+  if (z_d >= z_max)   return net.back().dilaton;
+
+  double pos = (z_d - epsilon) / net_step;
+  size_t idx = static_cast<size_t>(std::floor(pos));
+  if (idx >= net.size() - 1) {
+    return net.back().dilaton;
+  }
+  double frac = pos - static_cast<double>(idx);
+  return (1.0 - frac) * net[idx].dilaton + frac * net[idx + 1].dilaton;
 }
 
 template <class T> 
@@ -694,10 +705,17 @@ double Mesons_Model<T>::Auxiliary_function_prod_anz(double z) {
 
 //f(z) из статьи
 template <class T>
-T Mesons_Model<T>::Gaude_kinetic_function(T z) {
+double Mesons_Model<T>::kinetic_function(double z) {
   using std::exp;
-  return exp(-(metric_deformation(z) + Auxiliary_function(z)));
+  return exp(-(static_cast<double>(metric_deformation(z)) + static_cast<double>(Auxiliary_function_prod_anz(z))));
 }
+
+template <class T>
+double Mesons_Model<T>::kinetic_function_art(double z) {
+  using std::exp;
+  return exp(-(static_cast<double>(metric_deformation(z)) + static_cast<double>(Auxiliary_function(z))));
+}
+
 
 template <class T>
 T Mesons_Model<T>::article_potential_brick(T z) {

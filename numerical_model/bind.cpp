@@ -1,4 +1,5 @@
 #include "function_for_emulator.hpp"
+#include <pybind11/cast.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/functional.h>
 #include <pybind11/eigen.h>
@@ -7,6 +8,7 @@
 
 // Eigen::VectorXd heavy_meson_mass_counter(double, double, std::function<double(double)> metric_deformation);
 Eigen::VectorXd heavy_meson_mass_counter(double, double, const std::string&, const std::vector<double>&);
+Eigen::VectorXd heavy_meson_mass_counter_hard_wall(double z_max, double L, double k_sw_impact, const std::string& ansatz_name, const std::vector<double>& params);
 namespace py = pybind11;
 
 // PYBIND11_MODULE(meson_lib, m) {
@@ -30,5 +32,16 @@ PYBIND11_MODULE(meson_lib, m) {
           py::arg("ansatz_name"),
           py::arg("params"),
           "Calculates heavy meson masses given a metric deformation function.");
+    
+    m.doc() = "Heavy mesons simulator Python bindings";
+
+    m.def("heavy_meson_mass_counter_hardwall", 
+          &heavy_meson_mass_counter_hard_wall,
+          py::arg("z_max"),
+          py::arg("L"),
+          py::arg("k_sw_impact"),
+          py::arg("ansatz_name"),
+          py::arg("params"),
+          "Calculates heavy meson masses given a metric deformation function using hard wall model.");
 }
 
