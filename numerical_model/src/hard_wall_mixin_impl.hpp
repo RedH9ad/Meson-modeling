@@ -104,11 +104,15 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> HardWallMixin<Model>::build_threedia
   auto full_left = left_m + addition_m;
 
   for (size_t i = 0; i < diagonal.size() - 1; i++) {
-    diagonal(i) = full_left(i, i) / weight_m(i, i);
-    subdiagonal(i) = full_left(i, i + 1) / std::sqrt(weight_m(i, i) * weight_m(i + 1, i + 1));
+    double w_i = std::max(weight_m(i, i), 1e-300);
+    double w_next = std::max(weight_m(i + 1, i + 1), 1e-300);
+
+    diagonal(i) = full_left(i, i) / w_i;
+    subdiagonal(i) = full_left(i, i + 1) / (std::sqrt(w_i) * std::sqrt(w_next));
   }
   size_t last = diagonal.size() - 1;
-  diagonal(last) = full_left(last, last) / weight_m(last, last);
+  double w_last = std::max(weight_m(last, last), 1e-300);
+  diagonal(last) = full_left(last, last) / w_last;
 
   return {diagonal, subdiagonal};
 }

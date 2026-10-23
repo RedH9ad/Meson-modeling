@@ -1,5 +1,4 @@
-from batch_emulator import *
-from simulator import *
+from .batch_emulator import *
 import torch
 import tqdm
 import pandas as pd
@@ -28,22 +27,10 @@ class Emulator_Worker:
           3.140,
           3.6569,
           4.0558,
-          # Heavy_Mesons::Bottomonium
-          9.5065,
-          9.8290,
-          10.2272,
-          # Heavy_Mesons::Tetraquark
-          3.8901,
-          4.1895,
-          4.4446,
-          # Heavy_Mesons::Hybrid_Meson
-          1.3547,
-          1.6181,
-          1.8499,
       ],
       dtype=torch.double,
   ),
-  target_masses_errors = torch.zeros(12, dtype=torch.double),
+  target_masses_errors = None,
   bound_percent=0.5, 
   emulator_path="emulator_state.pth"
   ):
@@ -64,9 +51,12 @@ class Emulator_Worker:
     self.target_masses = torch.as_tensor(
             target_masses, dtype=torch.double
     ).view(1, -1)
-    self.target_masses_errors = torch.as_tensor(
-        target_masses_errors, dtype=torch.double
-    ).view(1, -1)
+    if (target_masses_errors is not None):
+      self.target_masses_errors = torch.as_tensor(
+          target_masses_errors, dtype=torch.double
+      ).view(1, -1)
+    else:
+      self.target_masses_errors = torch.zeros(len(self.target_masses), dtype=torch.double)
 
     self.bound_percent = bound_percent
 
@@ -78,7 +68,7 @@ class Emulator_Worker:
 
     self.emulator = None
     self.likelihood = None
-
+    self.Initialise_emulator()
 
     # def initialise_data_from_file(self, filename):
     #   df = pd.read_csv(filename)
@@ -104,7 +94,12 @@ class Emulator_Worker:
     self.y_mu = state['y_mu']
     self.y_std = state['y_std']
 
-    self.likelihood = self.gp_likelihood(num_tasks=3, batch_shape=torch.Size([4])).double()
+    if self.train_y_unit.dim() == 3:
+            b_shape = self.train_y_unit.shape[0]
+    elif self.train_y_unit.dim() == 2:
+        b_shape = self.train_y_unit.shape[1] // 3
+
+    self.likelihood = self.gp_likelihood(num_tasks=3, batch_shape=torch.Size([b_shape])).double()
     self.likelihood.load_state_dict(likelihood_state)
 
     self.emulator = self.gp_model(self.train_x_unit, self.train_y_unit, self.likelihood).double()
@@ -126,7 +121,9 @@ class Emulator_Worker:
     parametrs_unit = to_unit_cube(
         parametrs, self.lower_bounds, self.upper_bounds
     )
-  
+
+    parametrs.requires_grad_(True)
+
     prediction = make_prediction(
       self.emulator, self.likelihood, parametrs_unit
     )
@@ -136,7 +133,7 @@ class Emulator_Worker:
 
     return real_masses.squeeze(0).detach()
 
-  def return_rmse_and_grad(self, parametrs):
+  def return_mse_and_grad(self, parametrs):
     if not isinstance(parametrs, torch.Tensor):
       parametrs = torch.tensor(parametrs, dtype=torch.double)
     else:

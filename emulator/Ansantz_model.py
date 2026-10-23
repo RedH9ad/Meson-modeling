@@ -410,12 +410,12 @@ class ChenHuangAnsatz(torch.nn.Module):
                 "theta должен быть одномерным"
             )
 
-        if theta.numel() != self.N_PARAMETERS:
-            raise ValueError(
-                f"Ожидается {self.N_PARAMETERS} параметров "
-                f"{self.PARAMETER_NAMES}, "
-                f"получено {theta.numel()}."
-            )
+        # if theta.numel() != self.N_PARAMETERS:
+        #     raise ValueError(
+        #         f"Ожидается {self.N_PARAMETERS} параметров "
+        #         f"{self.PARAMETER_NAMES}, "
+        #         f"получено {theta.numel()}."
+        #     )
 
         if not torch.is_floating_point(theta):
             raise TypeError(

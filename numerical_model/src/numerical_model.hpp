@@ -40,7 +40,7 @@ class Mesons_Model : public HardWallMixin<Mesons_Model<T>> {
   double k_sw_impact = 0.0;
   double L = 1.0;
 
-  //МЕДЖИК ХУЙНЯ
+  //МЕДЖИК
   double epsilon = 1e-7;
 
   //constants

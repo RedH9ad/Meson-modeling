@@ -1,13 +1,12 @@
 import meson_lib
 import torch
 
-# Задаем деформацию метрики A(z)
-# C_WARP = 1.16
+
 name = "param"
 # name = "chen"
 def simulator(L, k_sw_impact, metric_deformation):
     "Функиция принимающая k, L, и анзац и возвращающая массы тяжелых мезонов"
-    masses = meson_lib.heavy_meson_mass_counter_hardwall(metric_deformation.theta_temp.numpy()[-1], L, k_sw_impact, name, metric_deformation.theta_temp.numpy()[:-1])
+    masses = meson_lib.charm_hw(metric_deformation.theta_temp.numpy()[-1], L, k_sw_impact, name, metric_deformation.theta_temp.numpy()[:-1])
     return torch.tensor(masses, dtype=torch.double)
 
 

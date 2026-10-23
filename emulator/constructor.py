@@ -1,6 +1,6 @@
-from batch_emulator import *
-from emulator_wrapper import *
-from simulator import *
+from .batch_emulator import *
+from .emulator_wrapper import *
+from .simulator import *
 import torch
 from tqdm.auto import tqdm
 import pandas as pd
@@ -48,6 +48,7 @@ class Emulator_Trainer:
       validation_initialised = False,
       emulator_path="emulator_state.pth"
     ):
+    self.b_shape = meson_masses_number // 3
     self.validation_path = validation_path
     self.validation_initialised = validation_initialised
 
@@ -131,7 +132,7 @@ class Emulator_Trainer:
     temp_x_unit = to_unit_cube(temp_x, self.lower_bounds, self.upper_bounds)  
     temp_y_unit = standardise_y(temp_y, self.y_mu, self.y_std)
 
-    likelihood = self.gp_likelihood_class(num_tasks=self.meson_masses_number // 4, batch_shape=torch.Size([4])).double()
+    likelihood = self.gp_likelihood_class(num_tasks=3, batch_shape=torch.Size([self.b_shape])).double()
     emulator = self.gp_model(temp_x_unit, format_y_to_batch(temp_y_unit), likelihood).double()
     states = [{"em_state" : emulator.state_dict(), "lik_state" : likelihood.state_dict(), "x" : emulator.train_inputs[0], "y" : emulator.train_targets}]
     trainBFGS(emulator, likelihood)
@@ -143,6 +144,8 @@ class Emulator_Trainer:
     mean_percent_error = percent_error_mean(prediction, self.validation_y_unit, self.y_mu, self.y_std)
     self.percent_error_max_arr.append(max_percent_error)
     self.percent_error_mean_arr.append(mean_percent_error)
+    counter = 0
+    print(len(self.train_x))
   
     while(len(temp_x_unit) < len(self.train_x)):
       next_id = adapt_mse_batch(emulator, likelihood, to_unit_cube(self.train_x, self.lower_bounds, self.upper_bounds))
@@ -156,7 +159,9 @@ class Emulator_Trainer:
       temp_y_unit = torch.cat([format_y_from_batch(emulator.train_targets), next_y.view(1, -1)])
 
       emulator.set_train_data(inputs=temp_x_unit, targets=format_y_to_batch(temp_y_unit), strict=False)
-      trainBFGS(emulator, likelihood)
+      if (counter < 100 or counter % 10 == 0):
+        trainBFGS(emulator, likelihood)
+      counter += 1
       prediction = make_prediction(emulator, likelihood, self.validation_x_unit)
 
       self.msll_errors.append(MSLL(prediction, self.validation_y_unit).item())
@@ -241,10 +246,10 @@ class Emulator_Trainer:
     train_x_unit = to_unit_cube(self.train_x, self.lower_bounds, self.upper_bounds)
     train_y_unit = standardise_y(self.train_y, self.y_mu, self.y_std)
 
-    self.likelihood = self.gp_likelihood_class(num_tasks=self.meson_masses_number // 4, batch_shape=torch.Size([4])).double()
+    self.likelihood = self.gp_likelihood_class(num_tasks=3, batch_shape=torch.Size([self.b_shape])).double()
     self.emulator = self.gp_model(train_x_unit, format_y_to_batch(train_y_unit), self.likelihood).double()
-    print("Эмулятор создан, стартовый подгон гиперпарметров")
-    trainBFGS(self.emulator, self.likelihood)
+    # print("Эмулятор создан, стартовый подгон гиперпарметров")
+    # trainBFGS(self.emulator, self.likelihood)
 
   def initialise_validation_set(self):
     "Генерирует валидационные данные"
@@ -332,7 +337,6 @@ class Emulator_Trainer:
     "Проверяет насколько хорош итоговый эмулятор, требует верификацию обученности"
     msll, percent_max, percent_mean = self.test_metrics()
     prediction = make_prediction(self.emulator, self.likelihood, self.validation_x_unit)
-    percent_error_diagnostic(prediction, self.validation_y_unit, self.y_mu, self.y_std, self.validation_x)
 
     while True:
       print("Обчение завершено")
@@ -392,7 +396,7 @@ class Emulator_Trainer:
 
     for _ in range(tries):
       x_unit = torch.rand(dim, dtype=self.lower_bounds.dtype, requires_grad=True)
-      optimizer = torch.optim.Adam([x_unit], lr=0.05)
+      optimizer = torch.optim.Adam([x_unit], lr=0.005)
 
       for _ in range(iterations):
         optimizer.zero_grad()

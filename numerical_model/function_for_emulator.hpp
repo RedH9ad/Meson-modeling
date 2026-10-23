@@ -56,3 +56,25 @@ Eigen::VectorXd heavy_meson_mass_counter_hard_wall(double zet, double L, double 
   Heavy_Mesons_Processor<autodiff::real3rd> worker(simulator, targets);
   return worker.get_heavy_meson_mass_anz_sturm();
 }
+
+Eigen::VectorXd charm_and_tetra_hw(double zet, double L, double k_sw_impact, const std::string& ansatz_name, const std::vector<double>& params) {
+  std::shared_ptr<Ansatz_Abstract<autodiff::real3rd>> ansatz = create_ansatz<autodiff::real3rd>(ansatz_name, params);
+  std::function<autodiff::real3rd(autodiff::real3rd)> func = [ansatz](autodiff::real3rd z) {
+      return (*ansatz)(z);
+  };
+  Mesons_Model<autodiff::real3rd> simulator(Net_Parametrs::net_nodes, zet, k_sw_impact, L, func);
+  std::vector<HeavyMesonConfig> targets{Heavy_Mesons::Charmonium, Heavy_Mesons::Tetraquark};
+  Heavy_Mesons_Processor<autodiff::real3rd> worker(simulator, targets);
+  return worker.get_heavy_meson_mass_anz_sturm();
+}
+
+Eigen::VectorXd charm_hw(double zet, double L, double k_sw_impact, const std::string& ansatz_name, const std::vector<double>& params) {
+  std::shared_ptr<Ansatz_Abstract<autodiff::real3rd>> ansatz = create_ansatz<autodiff::real3rd>(ansatz_name, params);
+  std::function<autodiff::real3rd(autodiff::real3rd)> func = [ansatz](autodiff::real3rd z) {
+      return (*ansatz)(z);
+  };
+  Mesons_Model<autodiff::real3rd> simulator(Net_Parametrs::net_nodes, zet, k_sw_impact, L, func);
+  std::vector<HeavyMesonConfig> targets{Heavy_Mesons::Charmonium};
+  Heavy_Mesons_Processor<autodiff::real3rd> worker(simulator, targets);
+  return worker.get_heavy_meson_mass_anz_sturm();
+}

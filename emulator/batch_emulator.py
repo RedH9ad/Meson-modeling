@@ -24,16 +24,20 @@ class FixedMultitaskKernel(gpytorch.kernels.MultitaskKernel):
 class MesonGP(gpytorch.models.ExactGP):
   def __init__(self, train_x, train_y, likelihood):
     super(MesonGP, self).__init__(train_x, train_y, likelihood)
-   
+    if train_y.dim() == 3:
+            b_shape = train_y.shape[0]
+    elif train_y.dim() == 2:
+        b_shape = train_y.shape[1] // 3
+
     self.mean_module = gpytorch.means.MultitaskMean(
-      [gpytorch.means.LinearMean(train_x.shape[-1], batch_shape=torch.Size([4])) for _ in range(3)],
+      [gpytorch.means.LinearMean(train_x.shape[-1], batch_shape=torch.Size([b_shape])) for _ in range(3)],
       num_tasks=3
     )
 
-    kernel = gpytorch.kernels.MaternKernel(nu=2.5, ard_num_dims=train_x.shape[-1], batch_shape=torch.Size([4]))
+    kernel = gpytorch.kernels.MaternKernel(nu=2.5, ard_num_dims=train_x.shape[-1], batch_shape=torch.Size([b_shape]))
 
     self.covar_module = FixedMultitaskKernel(
-      kernel, num_tasks=3, rank=1, batch_shape=torch.Size([4])
+      kernel, num_tasks=3, rank=2, batch_shape=torch.Size([b_shape])
     )
 
   def forward(self, x):
@@ -47,7 +51,7 @@ def make_prediction(model, likelihood, x_interest):
   observed_pred = likelihood(model(x_interest))
   return observed_pred
 
-def trainBFGS(model, likelihood, iters=60):
+def trainBFGS(model, likelihood, iters=30):
   model.train()
   likelihood.train()
   model.double()
@@ -81,92 +85,6 @@ def percent_error_max(prediction, test_y, y_mean, y_std):
   percent_error = torch.abs(test_y_norm - pred_mean) / torch.abs(test_y_norm)
   return torch.max(percent_error).item() * 100
 
-def percent_error_diagnostic(
-    prediction,
-    test_y,
-    y_mean,
-    y_std,
-    test_x=None,
-    top_k=20,
-    eps=1e-8,
-    verbose=True,
-):
-    # 1. Денормализация
-    test_y_norm = test_y * y_std + y_mean
-    pred_mean = format_y_from_batch(prediction.mean) * y_std + y_mean
-
-    # Защита от бродкастинга (N,) vs (N, 1)
-    if pred_mean.shape != test_y_norm.shape:
-        pred_mean = pred_mean.view_as(test_y_norm)
-
-    # 2. Расчет ошибок с защитой от деления на 0
-    abs_error = torch.abs(test_y_norm - pred_mean)
-    denom = torch.clamp(torch.abs(test_y_norm), min=eps)
-    percent_error = (abs_error / denom) * 100.0
-
-    # Проверяем многомерность таргета (N_samples, N_outputs)
-    num_tasks = test_y_norm.shape[1] if test_y_norm.ndim > 1 else None
-
-    # Разворачиваем в 1D для общего топа
-    flat_percent = percent_error.flatten()
-    flat_abs = abs_error.flatten()
-    flat_true = test_y_norm.flatten()
-    flat_pred = pred_mean.flatten()
-
-    # Извлекаем stddev модели (если prediction от GP / GPyTorch)
-    flat_std = None
-    if hasattr(prediction, "stddev"):
-        pred_std = format_y_from_batch(prediction.stddev) * y_std
-        if pred_std.shape != test_y_norm.shape:
-            pred_std = pred_std.view_as(test_y_norm)
-        flat_std = pred_std.flatten()
-
-    # 3. Находим top_k худших точек
-    k = min(top_k, flat_percent.numel())
-    top_errors, top_indices = torch.topk(flat_percent, k=k)
-
-    # 4. Вывод диагностики
-    if verbose:
-        print("=" * 76)
-        print(f"АНАЛИЗ ОШИБОК (всего элементов: {flat_percent.numel()}):")
-        print(
-            f"Средняя: {torch.mean(flat_percent).item():.2f}% | "
-            f"Медиана: {torch.median(flat_percent).item():.2f}% | "
-            f"Q95: {torch.quantile(flat_percent, 0.95).item():.2f}% | "
-            f"Q99: {torch.quantile(flat_percent, 0.99).item():.2f}%"
-        )
-        print("-" * 76)
-        print(f"ТОП-{k} ХУДШИХ ТОЧЕК:")
-
-        for rank, (idx_tensor, err_tensor) in enumerate(zip(top_indices, top_errors), start=1):
-            i = idx_tensor.item()
-            y_t = flat_true[i].item()
-            y_p = flat_pred[i].item()
-            a_err = flat_abs[i].item()
-            p_err = err_tensor.item()
-
-            std_str = f" | σ_pred: {flat_std[i].item():.4f}" if flat_std is not None else ""
-
-            # Локализация сэмпла и выхода (если таргет многомерный)
-            if num_tasks is not None:
-                sample_idx = i // num_tasks
-                task_idx = i % num_tasks
-                loc_str = f"Индекс {i:4d} (Сэмпл {sample_idx:3d}, Выход {task_idx:2d})"
-            else:
-                sample_idx = i
-                loc_str = f"Индекс {i:4d}"
-
-            # Безопасное извлечение X (по номеру сэмпла, а не плоскому индексу)
-            x_str = ""
-            if test_x is not None:
-                coord = test_x[sample_idx].tolist() if hasattr(test_x[sample_idx], "tolist") else test_x[sample_idx]
-                x_str = f"\n    X: {coord}"
-
-            print(f"#{rank:2d} [{loc_str}]  Ошибка: {p_err:6.2f}% (Абс: {a_err:.5f}){std_str}")
-            print(f"    True: {y_t:10.5f} | Pred: {y_p:10.5f}{x_str}")
-        print("=" * 76)
-
-    return None
 
 def percent_error_mean(prediction, test_y, y_mean, y_std):
   test_y = test_y * y_std + y_mean
@@ -179,11 +97,25 @@ def MSLL(prediction, test_y):
   return msll.mean()
 
 def format_y_to_batch(y_tensor):
+
+  if y_tensor.dim() == 1:
+      y_tensor = y_tensor.unsqueeze(0)
+
   N = y_tensor.shape[0]
-  return y_tensor.view(N, 4, 3).permute(1, 0, 2).contiguous()
+
+  b_shape = y_tensor.shape[1] // 3
+
+
+  return y_tensor.view(N, b_shape, 3).permute(1, 0, 2).contiguous()
+
 
 def format_y_from_batch(y_batch):
-  return y_batch.permute(1, 0, 2).contiguous().view(-1, 12)
+  if y_batch.dim() == 2:
+      y_batch = y_batch.unsqueeze(0)
+
+  b_shape = y_batch.shape[0]
+
+  return y_batch.permute(1, 0, 2).contiguous().view(-1, 3 * b_shape)
 
 def format_x_to_batch(x_tensor):
   return x_tensor.unsqueeze(0).expand(4, -1, -1).contiguous()
