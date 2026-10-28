@@ -7,12 +7,7 @@ import pandas as pd
 import sys
 import matplotlib.pyplot as plt
 
-#В функцию передаются два параметра относящихся к мезонам
-#k_sw_impact и L и они фиксируются(пока с Аней обсудили что просто единицами и если захотим и их подгонять чета чета сделаю)
 
-#Что может делать пользователь: нужно создать объект класса, после чего просто вызвать Train() и оно обучит эмулятор
-#Также при создании класса есть возможность выбора - можно либо задать bound_percent_max если нужно чтобы максимальное процентное отклонение предсказания не превысило
-#Или задать bound_percent_mean - если нужно чтобы среднее не превысило
 class Emulator_Trainer:
   "Класс обучающий эмулятор на основе симулятора"
   "gp_model - класс используемого эмулятора"
@@ -330,10 +325,10 @@ class Emulator_Trainer:
     self.plot_tensor_values(torch.tensor(self.percent_error_max_arr, dtype=torch.double), "Max error, %")
     self.plot_tensor_values(torch.tensor(self.percent_error_mean_arr, dtype=torch.double), "Mean error, %") 
     
-    self.check_ebalo()
+    self.check_face()
     self.save_emulator_state()
 
-  def check_ebalo(self):
+  def check_face(self):
     "Проверяет насколько хорош итоговый эмулятор, требует верификацию обученности"
     msll, percent_max, percent_mean = self.test_metrics()
     prediction = make_prediction(self.emulator, self.likelihood, self.validation_x_unit)
@@ -480,6 +475,3 @@ def initialise_data_from_file(filename):
   outputs = torch.tensor(df[out_cols].values, dtype=torch.double)
 
   return inputs, outputs
-#Идет оптимизация дисперсии в точке, то есть, по сути нужно отдать prediction vatience и оптимизировать
-
-#Мы хотим передавать 

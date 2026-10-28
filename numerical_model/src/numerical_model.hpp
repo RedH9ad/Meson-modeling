@@ -109,7 +109,6 @@ class Mesons_Model : public HardWallMixin<Mesons_Model<T>> {
 
   static std::pair<std::vector<T>, std::vector<T>> first_and_second_derivative_num_counter(const std::vector<T>&, double);
 
-  //Функции для рассчета всего по статье по каким-то причинам не работают, хотя значения альфа и к из самой статьи вполне выполняют пайплайн
   // static double dilaton_alpha(double);
   // static double dilaton_k(double);
 
@@ -189,7 +188,7 @@ Mesons_Model<T>::Mesons_Model(size_t nn, double k, std::function<T(T)> md) : tot
 }
 
 //Инициализация кирального сектора происходит после задания дилатона
-//В дабл кастится вся хуйня потому что киральный сектор позиционируется как дабл
+//В дабл кастится все потому что киральный сектор позиционируется как дабл
 template <class T>
 void Mesons_Model<T>::initialize_kiral_sector() {
   std::vector<double> first_factor(net.size());
@@ -320,9 +319,6 @@ void Mesons_Model<T>::dilaton_setter_num() {
   for (size_t i = 0; i < dilaton_ders.size() - 1; i++) {
     T new_val = net[i].dilaton + dilaton_ders[i] * net_step;
 
-    // if (new_val < 0 || std::isnan(new_val)) {
-    //   throw std::runtime_error("Данный анзац не подходит");
-    // }
     net[i + 1].dilaton = static_cast<double>(new_val);
   }
   std::for_each(net.begin(), net.end(), [this](NetNode<T>& node) {node.dilaton *= k_sw_impact;});

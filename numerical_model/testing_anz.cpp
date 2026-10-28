@@ -26,14 +26,4 @@ int main() {
   // processor.check_process_times(targets[0]);
   auto res = processor.get_heavy_meson_mass_anz_sturm();
   std::cout << res;
-
-  // auto model = Mesons_Model<double>(net_nodes, z_max_val, dummy_k, deform);
-  // auto process = Heavy_Mesons_Processor(model, targets);
-  // process.check_process_times(targets[0]);
-  // auto res_1 = process.get_heavy_meson_mass_num();
-  // std::cout << res_1;
-  // std::cout << "Хуй:" << res.size();
-  // for (auto& point : res_1) {
-  //   std::cout << point;
-  // }
 }

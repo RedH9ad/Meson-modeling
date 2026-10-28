@@ -11,8 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # 2. Настройка скачивания зависимостей
 include(FetchContent)
 
-# ВАЖНО: Правильные флаги для отключения лишнего.
-# Имя флага для питона в autodiff — AUTODIFF_BUILD_PYTHON.
+
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(AUTODIFF_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(AUTODIFF_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
